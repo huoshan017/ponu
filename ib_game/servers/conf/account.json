@@ -1,0 +1,8 @@
+{
+	"Id": 1000,
+	"Name": "AccountServer",
+	"ListenAddr": "127.0.0.1:20000",
+	"DBProxyAddr": "127.0.0.1:10000",
+	"DBHostId": 1,
+	"DBHostAlias": "main"
+}
