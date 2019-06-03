@@ -1,9 +1,8 @@
 package utils
 
 import (
-	"ih_server/libs/log"
 	"math/rand"
-	"time"
+	//"time"
 )
 
 const MAX_SKIPLIST_LAYER = 32
@@ -75,7 +74,7 @@ func NewSkiplist() *Skiplist {
 
 func (this *Skiplist) Insert(v SkiplistNode) int32 {
 	if this.curr_length == 0 {
-		log.Debug("###[Skiplist]### first node[%v]", v)
+		//log.Debug("###[Skiplist]### first node[%v]", v)
 	}
 
 	node := this.head
@@ -243,7 +242,7 @@ func (this *Skiplist) Delete(v SkiplistNode) bool {
 
 	node := this.GetNode(v)
 	if node == nil {
-		log.Error("###[Skiplist]### get node %v failed", v)
+		//log.Error("###[Skiplist]### get node %v failed", v)
 		return false
 	}
 
@@ -258,7 +257,7 @@ func (this *Skiplist) DeleteByRank(rank int32) bool {
 	}
 	node := this.GetNodeByRank(rank)
 	if node == nil {
-		log.Error("###[Skiplist]### get node by rank[%v] failed", rank)
+		//log.Error("###[Skiplist]### get node by rank[%v] failed", rank)
 		return false
 	}
 
@@ -423,145 +422,4 @@ func (this *PlayerInfo) Assign(node SkiplistNode) {
 
 func (this *PlayerInfo) CopyDataTo(node interface{}) {
 
-}
-
-func SkiplistTest(node_count int32) {
-	sp := NewSkiplist()
-
-	now_time := time.Now()
-	rand.Seed(now_time.Unix() + now_time.UnixNano())
-	player_ids := make([]Int32Value, node_count)
-	for i := 0; i < len(player_ids); i++ {
-		n := Int32Value(rand.Int31n(1000000))
-		sp.Insert(n)
-	}
-	end_time := time.Now()
-	log.Debug("###[Skiplist]### insert %v nodes cost: %v ms", node_count, (end_time.Unix()*1000 + end_time.UnixNano()/1000000 - (now_time.Unix()*1000 + now_time.UnixNano()/1000000)))
-
-	now_time = time.Now()
-	for rank := int32(1); rank <= int32(len(player_ids)); rank++ {
-		sp.GetByRank(rank)
-	}
-	end_time = time.Now()
-	log.Debug("###[Skiplist]### get %v nodes by rank cost: %v ms", node_count, (end_time.Unix()*1000 + end_time.UnixNano()/1000000 - (now_time.Unix()*1000 + now_time.UnixNano()/1000000)))
-
-	now_time = time.Now()
-	for i := 0; i < len(player_ids); i++ {
-		sp.GetRank(player_ids[i])
-	}
-	end_time = time.Now()
-	log.Debug("###[Skiplist]### get [%v] rank nodes cost: %v ms", node_count, (end_time.Unix()*1000 + end_time.UnixNano()/1000000 - (now_time.Unix()*1000 + now_time.UnixNano()/1000000)))
-}
-
-func SkiplistTest2(node_count int32) {
-	var player_infos []*PlayerInfo
-	rand.Seed(time.Now().Unix())
-
-	for i := int32(1); i <= node_count; i++ {
-		s := rand.Int31n(100000)
-		d := &PlayerInfo{
-			PlayerId:    i,
-			PlayerLevel: i,
-			PlayerScore: s,
-		}
-		player_infos = append(player_infos, d)
-	}
-
-	sp := NewSkiplist()
-	arr := make([]int32, len(player_infos))
-	for i, v := range player_infos {
-		arr[i] = sp.Insert(v)
-	}
-
-	for i, v := range player_infos {
-		n := sp.GetNode(v)
-		if n == nil {
-			log.Warn("@@@@@ node[%v] layer[%v] not found", v, arr[i])
-		} else {
-			//log.Debug("###[Skiplist]### node: %v", *v)
-		}
-	}
-
-	/*log.Debug("###[Skiplist]### get node list by rank:")
-	for i := int32(1); i <= node_count; i++ {
-		n := sp.GetByRank(i)
-		if n != nil {
-			node := n.(*PlayerInfo)
-			if node != nil {
-				log.Debug("    rank:%v   node:%v", i, *node)
-			}
-		} else {
-			log.Error("###[Skiplist]### get node by rank[%v] failed", i)
-		}
-	}*/
-
-	log.Debug("Done list length[%v] layer[%v] !!!!!!!!!!!!!!!!!!!!!!!!", sp.GetLength(), sp.GetLayer())
-	for i := int32(0); i < sp.GetLayer(); i++ {
-		log.Debug("    layer[%v] node length[%v]", i+1, sp.GetLayerLength(i+1))
-	}
-
-	sn := make([]SkiplistNode, 20)
-	for i := int32(0); i < node_count; i++ {
-		r := rand.Int31n(node_count)
-		s := player_infos[r]
-		if !sp.Delete(s) {
-			log.Warn("###[Skiplist]### sp delete node[%v] failed", *s)
-		}
-
-		/*log.Debug("###[Skiplist]### after delete node[%v], left nodes:", *s)
-		for k := int32(1); k <= node_count; k++ {
-			node := sp.GetByRank(k)
-			if node == nil {
-				continue
-			}
-			nnode := node.(*PlayerInfo)
-			if nnode != nil {
-				log.Debug("    rank:%v  value:%v", k, *nnode)
-			}
-		}*/
-
-		s.PlayerScore = rand.Int31n(100000)
-		sp.Insert(s)
-
-		/*log.Debug("###[Skiplist]### after insert node[%v], nodes:", *s)
-		for k := int32(1); k <= node_count; k++ {
-			node := sp.GetByRank(k)
-			nnode := node.(*PlayerInfo)
-			if nnode != nil {
-				log.Debug("    rank:%v  value:%v", k, *nnode)
-			}
-		}*/
-
-		rank := sp.GetRank(s)
-		//node := sp.GetNodeByRank(rank)
-		rank_start := rank - 10
-		if rank_start <= 0 {
-			rank_start = 1
-		}
-		if !sp.GetByRankRange(rank_start, 20, sn) {
-			log.Error("###[Skiplist]### sp GetByRankRange[rank_start:%v, num:%v] failed", rank_start, 20)
-			break
-		}
-		for j := rank_start; j < rank_start+20; j++ {
-			if sn[j-rank_start] == nil {
-				break
-			}
-			nn := sn[j-rank_start].(*PlayerInfo)
-			if nn == nil {
-				log.Error("!!!!!!!!!!!!!!!!!!!!!!!!!!")
-				continue
-			}
-			if j == rank && !sn[j-rank_start].KeyEqual(s) {
-				log.Error("###[Skiplist]### sp get rank[%v] by s[%v] Not Equal To the node[%v] get by rank[%v] rank_start[%v] index[%v]", rank, *s, *nn, rank, rank_start, j-1)
-				for k := int32(1); k <= node_count; k++ {
-					node := sp.GetByRank(k)
-					nnode := node.(*PlayerInfo)
-					if nnode != nil {
-						log.Debug("    %v", *nnode)
-					}
-				}
-				break
-			}
-		}
-	}
 }
