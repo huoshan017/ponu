@@ -1,24 +1,13 @@
-set GOPATH=%cd%/../../../../../../
+set GOPATH=%cd%/../../../../../../..
 
-cd db_define
+cd ../conf/db
 md proto
-cd ..
 
-cd ../../bin
-code_generator.exe -c ../proxy/test/db_define/game_db.json -d ../proxy/test -p ../proxy/test/db_define/proto/game_db.proto
-cd ../example
+cd ../../tools
+code_generator.exe -c ../conf/db/game_db.json -d ../game -p ../conf/db/proto/game_db.proto
+code_generator.exe -c ../conf/db/account_db.json -d ../account -p ../conf/db/proto/account_db.proto
 
 cd protobuf
-protoc.exe --go_out=../../proxy/test/game_db --proto_path=../../proxy/test/db_define/proto game_db.proto
+protoc.exe --go_out=../../game/game_db --proto_path=../../conf/db/proto game_db.proto
+protoc.exe --go_out=../../account/account_db --proto_path=../../conf/db/proto account_db.proto
 cd ../../proxy/test
-
-go build -i -o ../bin/test_client.exe github.com/huoshan017/mysql-go/proxy/test
-if errorlevel 1 goto exit
-
-goto ok
-
-:exit
-echo build failed !!!
-
-:ok
-echo build ok

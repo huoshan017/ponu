@@ -4,5 +4,6 @@
 	"ListenAddr": "127.0.0.1:20000",
 	"DBProxyServerAddr": "127.0.0.1:10000",
 	"DBHostId": 1,
-	"DBHostAlias": "main"
+	"DBHostAlias": "main",
+	"DBName":"account_db"
 }

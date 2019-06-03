@@ -35,7 +35,7 @@ func (this *Service) Start(addr string) error {
 	return http.ListenAndServe(addr, this.mux)
 }
 
-func (this *Service) RunLoop(addr string) {
+func (this *Service) GoRun(addr string) {
 	go func() {
 		err := http.ListenAndServe(addr, this.mux)
 		this.err_locker.Lock()
