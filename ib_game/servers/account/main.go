@@ -5,9 +5,7 @@ import (
 	"flag"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
-	"runtime/debug"
 	"time"
 
 	phttp "github.com/huoshan017/ponu/http"
@@ -37,6 +35,31 @@ func (this *Config) Init(config_path string) bool {
 	return true
 }
 
+type Server struct {
+	db_proxy     DBProxy
+	http_service phttp.Service
+	config       *Config
+}
+
+var server Server
+
+func (this *Server) Init(config *Config) bool {
+	if !this.db_proxy.Connect(config.DBProxyServerAddr, config.DBHostId, config.DBHostAlias, config.DBName) {
+		return false
+	}
+	this.http_service.HandleFunc("/account", request_handler)
+	this.config = config
+	return true
+}
+
+func (this *Server) Run() {
+	this.db_proxy.GoRun()
+	this.http_service.GoRun(this.config.ListenAddr)
+	for {
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Printf("args not enough, must specify a config file for db define\n")
@@ -60,34 +83,9 @@ func main() {
 		return
 	}
 
-	if !db_proxy.Connect(config.DBProxyServerAddr, config.DBHostId, config.DBHostAlias, config.DBName) {
+	if !server.Init(&config) {
 		return
 	}
 
-	db_proxy.GoRun()
-
-	var hs phttp.Service
-	hs.HandleFunc("/account", request_handler)
-	hs.GoRun(config.ListenAddr)
-
-	for {
-		time.Sleep(time.Millisecond * 100)
-	}
-}
-
-func request_handler(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		if err := recover(); err != nil {
-			debug.PrintStack()
-		}
-	}()
-
-	defer r.Body.Close()
-
-	data, err := ioutil.ReadAll(r.Body)
-	if nil != err {
-		//_send_error(w, 0, -1)
-		log.Printf("request_handler ReadAll err[%s]", err.Error())
-		return
-	}
+	server.Run()
 }

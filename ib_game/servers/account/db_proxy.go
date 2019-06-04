@@ -10,8 +10,6 @@ type DBProxy struct {
 	table_proxys account_db.TableProxysManager
 }
 
-var db_proxy DBProxy
-
 func (this *DBProxy) Connect(proxy_addr string, db_host_id int32, db_host_alias, db_name string) bool {
 	if !this.db.Connect(proxy_addr, db_host_id, db_host_alias, db_name) {
 		return false
