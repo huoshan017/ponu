@@ -10,9 +10,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/huoshan017/mysql-go/proxy/client"
 	phttp "github.com/huoshan017/ponu/http"
-	"github.com/huoshan017/ponu/ib_game/servers/account/account_db"
 )
 
 type Config struct {
@@ -62,19 +60,11 @@ func main() {
 		return
 	}
 
-	var db mysql_proxy.DB
-	if !db.Connect(config.DBProxyServerAddr, config.DBHostId, config.DBHostAlias, config.DBName) {
+	if !db_proxy.Connect(config.DBProxyServerAddr, config.DBHostId, config.DBHostAlias, config.DBName) {
 		return
 	}
 
-	var table_proxys account_db.TableProxysManager
-	table_proxys.Init(&db)
-
-	account_table_proxy := table_proxys.Get_T_Account_Table_Proxy()
-	accounts := account_table_proxy.SelectAllPrimaryField()
-	for i := 0; i < len(accounts); i++ {
-		log.Printf("index: %v, account: %v\n", i, accounts[i])
-	}
+	db_proxy.GoRun()
 
 	var hs phttp.Service
 	hs.HandleFunc("/account", request_handler)
