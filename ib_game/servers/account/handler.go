@@ -4,13 +4,15 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"reflect"
 	"runtime/debug"
 )
 
-func request_handler(w http.ResponseWriter, r *http.Request) {
+func verify_handler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
 			debug.PrintStack()
+			log.Printf("%v\n", reflect.TypeOf(err))
 		}
 	}()
 
@@ -19,15 +21,46 @@ func request_handler(w http.ResponseWriter, r *http.Request) {
 	data, err := ioutil.ReadAll(r.Body)
 	if nil != err {
 		//_send_error(w, 0, -1)
-		log.Printf("request_handler ReadAll err[%s]", err.Error())
+		log.Printf("verify handler ReadAll err %v\n", err.Error())
 		return
 	}
 
-	var iret int
-	iret, err = w.Write(data)
+	data, err = _verify(data)
+	if err != nil {
+
+	}
+
+	var ret int
+	ret, err = w.Write(data)
 	if nil != err {
 		//_send_error(w, 0, -1)
-		log.Printf("client_msg_handler write data 2 failed err[%s] ret %d\n", err.Error(), iret)
+		log.Printf("verify handler Write err %v, ret %v\n", err.Error(), ret)
+		return
+	}
+}
+
+func _verify(data []byte) (ret_data []byte, err error) {
+	return
+}
+
+func register_handler(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			debug.PrintStack()
+			log.Printf("%v\n", reflect.TypeOf(err))
+		}
+	}()
+	defer r.Body.Close()
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("register handler ReadAll err %v\n", err.Error())
+		return
+	}
+
+	var ret int
+	ret, err = w.Write(data)
+	if err != nil {
+		log.Printf("register handler Write err %v, ret %v\n", err.Error(), ret)
 		return
 	}
 }

@@ -47,7 +47,8 @@ func (this *Server) Init(config *Config) bool {
 	if !this.db_proxy.Connect(config.DBProxyServerAddr, config.DBHostId, config.DBHostAlias, config.DBName) {
 		return false
 	}
-	this.http_service.HandleFunc("/account", request_handler)
+	this.http_service.HandleFunc("/account_verify", verify_handler)
+	this.http_service.HandleFunc("/account_register", register_handler)
 	this.config = config
 	return true
 }
