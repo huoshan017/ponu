@@ -1,5 +1,0 @@
-{
-	"ListenAddr": "127.0.0.1:10000",
-	"DBListConfigPath": "db/dblist_define.json",
-	"DBBackupPath": ""
-}
