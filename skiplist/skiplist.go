@@ -2,7 +2,6 @@ package utils
 
 import (
 	"math/rand"
-	//"time"
 )
 
 const MAX_SKIPLIST_LAYER = 32
@@ -73,10 +72,6 @@ func NewSkiplist() *Skiplist {
 }
 
 func (this *Skiplist) Insert(v SkiplistNode) int32 {
-	if this.curr_length == 0 {
-		//log.Debug("###[Skiplist]### first node[%v]", v)
-	}
-
 	node := this.head
 	for i := this.curr_layer - 1; i >= 0; i-- {
 		if i == this.curr_layer-1 {
@@ -242,7 +237,6 @@ func (this *Skiplist) Delete(v SkiplistNode) bool {
 
 	node := this.GetNode(v)
 	if node == nil {
-		//log.Error("###[Skiplist]### get node %v failed", v)
 		return false
 	}
 
@@ -257,7 +251,6 @@ func (this *Skiplist) DeleteByRank(rank int32) bool {
 	}
 	node := this.GetNodeByRank(rank)
 	if node == nil {
-		//log.Error("###[Skiplist]### get node by rank[%v] failed", rank)
 		return false
 	}
 
@@ -332,94 +325,5 @@ func (this Int32Value) Assign(node SkiplistNode) {
 }
 
 func (this Int32Value) CopyDataTo(node interface{}) {
-
-}
-
-type PlayerInfo struct {
-	PlayerId    int32
-	PlayerLevel int32
-	PlayerScore int32
-}
-
-func (this *PlayerInfo) Less(info interface{}) bool {
-	item := info.(*PlayerInfo)
-	if item == nil {
-		return false
-	}
-	if this.PlayerScore < item.PlayerScore {
-		return true
-	}
-	if this.PlayerScore == item.PlayerScore {
-		if this.PlayerLevel < item.PlayerLevel {
-			return true
-		}
-		if this.PlayerLevel == item.PlayerLevel {
-			if this.PlayerId < item.PlayerId {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (this *PlayerInfo) Greater(info interface{}) bool {
-	item := info.(*PlayerInfo)
-	if item == nil {
-		return false
-	}
-	if this.PlayerScore > item.PlayerScore {
-		return true
-	}
-	if this.PlayerScore == item.PlayerScore {
-		if this.PlayerLevel > item.PlayerLevel {
-			return true
-		}
-		if this.PlayerLevel == item.PlayerLevel {
-			if this.PlayerId > item.PlayerId {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (this *PlayerInfo) KeyEqual(info interface{}) bool {
-	item := info.(*PlayerInfo)
-	if item == nil {
-		return false
-	}
-	if this.PlayerId == item.PlayerId {
-		return true
-	}
-	return false
-}
-
-func (this *PlayerInfo) GetKey() interface{} {
-	return this.PlayerId
-}
-
-func (this *PlayerInfo) GetValue() interface{} {
-	return this.PlayerId
-}
-
-func (this *PlayerInfo) SetValue(value interface{}) {
-
-}
-
-func (this *PlayerInfo) New() SkiplistNode {
-	return &PlayerInfo{}
-}
-
-func (this *PlayerInfo) Assign(node SkiplistNode) {
-	n := node.(*PlayerInfo)
-	if n == nil {
-		return
-	}
-	this.PlayerId = n.PlayerId
-	this.PlayerLevel = n.PlayerLevel
-	this.PlayerScore = n.PlayerScore
-}
-
-func (this *PlayerInfo) CopyDataTo(node interface{}) {
 
 }
