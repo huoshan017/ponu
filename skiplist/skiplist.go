@@ -1,4 +1,4 @@
-package utils
+package skiplist
 
 import (
 	"math/rand"
