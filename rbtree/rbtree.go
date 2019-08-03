@@ -135,15 +135,19 @@ func (this *RBTree) rotate_left(node *rbnode) bool {
 			return false
 		}
 		node_right.parent = parent
-		node.parent = node_right
+	} else {
+		node_right.parent = nil
 	}
 
+	node.parent = node_right
 	right_left := node_right.left
 	node_right.left = node
 	node.right = right_left
+	right_left.parent = node
 
 	if node == this.root {
 		this.root = node_right
+		node_right.color = NODE_COLOR_BLACK
 	}
 
 	return true
@@ -170,15 +174,19 @@ func (this *RBTree) rotate_right(node *rbnode) bool {
 			return false
 		}
 		node_left.parent = parent
-		node.parent = node_left
+	} else {
+		node_left.parent = nil
 	}
 
+	node.parent = node_left
 	left_right := node_left.right
 	node_left.right = node
 	node.left = left_right
+	left_right.parent = node
 
 	if node == this.root {
 		this.root = node_left
+		node_left.color = NODE_COLOR_BLACK
 	}
 
 	return true
@@ -193,10 +201,11 @@ func (this *RBTree) insert(value NodeValue) (node *rbnode) {
 
 	// new node is red
 	node = &rbnode{
-		value: value,
-		color: NODE_COLOR_RED,
-		left:  nil_node,
-		right: nil_node,
+		value:  value,
+		color:  NODE_COLOR_RED,
+		left:   nil_node,
+		right:  nil_node,
+		parent: insert_parent,
 	}
 
 	this.node_num += 1
@@ -215,31 +224,30 @@ func (this *RBTree) insert(value NodeValue) (node *rbnode) {
 		insert_parent.right = node
 	}
 
-	tmp := insert_parent
-
 loop:
 	// insert parent is black
-	if tmp.is_black() {
+	if insert_parent.is_black() {
 		return
 	}
 
 	// insert parent is red
 	// has uncle is red
-	uncle := tmp.get_brother()
+	uncle := insert_parent.get_brother()
 	if uncle != nil && uncle.is_red() {
-		tmp.color = NODE_COLOR_BLACK
+		insert_parent.color = NODE_COLOR_BLACK
 		uncle.color = NODE_COLOR_BLACK
-		gp := tmp.parent
+		gp := insert_parent.parent
+		// 祖父节点为根节点
 		if gp.is_root() {
 			return
 		}
 		gp.color = NODE_COLOR_RED
-		tmp = gp.parent
+		insert_parent = gp
 		goto loop
 	}
 
 	// uncle not exist or is black
-	grandparent := node.get_grandparent()
+	grandparent := insert_parent.parent //node.get_grandparent()
 	if grandparent == nil {
 		return
 	}
@@ -265,8 +273,8 @@ loop:
 				return
 			}
 		}
-	} else { // 父节点是祖父节点的右节点
-		if left_or_right { // 插入节点是父节点的左子节点
+	} else if insert_parent == grandparent.right { // 父节点是祖父节点的右节点
+		if !left_or_right { // 插入节点是父节点的右子节点
 			// 变色
 			insert_parent.color = NODE_COLOR_BLACK
 			grandparent.color = NODE_COLOR_RED
@@ -274,7 +282,7 @@ loop:
 			if !this.rotate_left(grandparent) {
 				return
 			}
-		} else { // 插入节点是父节点的右子节点
+		} else { // 插入节点是父节点的左子节点
 			// 右旋
 			if !this.rotate_right(insert_parent) {
 				return
@@ -287,6 +295,8 @@ loop:
 				return
 			}
 		}
+	} else {
+		fmt.Fprintf(os.Stderr, "insert parent is not grand parent left and right")
 	}
 
 	return
