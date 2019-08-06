@@ -7,8 +7,6 @@ import (
 
 type NodeValue interface {
 	Less(node NodeValue) bool
-	Greater(node NodeValue) bool
-	Equal(node NodeValue) bool
 }
 
 const (
@@ -36,12 +34,20 @@ func (this *rbnode) is_nil() bool {
 	return this.value == nil && this.color == NODE_COLOR_BLACK
 }
 
-func (this *rbnode) is_red() bool {
+func (this *rbnode) color_is_red() bool {
 	return this.color == NODE_COLOR_RED
 }
 
-func (this *rbnode) is_black() bool {
+func (this *rbnode) color_is_black() bool {
 	return this.color == NODE_COLOR_BLACK
+}
+
+func (this *rbnode) color_set_red() {
+	this.color = NODE_COLOR_RED
+}
+
+func (this *rbnode) color_set_black() {
+	this.color = NODE_COLOR_BLACK
 }
 
 func (this *rbnode) get_uncle() *rbnode {
@@ -77,50 +83,48 @@ type RBTree struct {
 	node_num uint32
 }
 
+func is_nil(node *rbnode) bool {
+	if node == nil || node.is_nil() {
+		return true
+	}
+	return false
+}
+
 func (this *RBTree) _get_insert_parent(value NodeValue) (is_equal bool, node *rbnode, left_or_right bool) {
-	p := this.root
-	if p == nil {
+	if this.root == nil {
 		return
 	}
 
-	for p != nil || !p.is_nil() {
-		if p.value.Equal(value) {
-			is_equal = true
-			node = p
-			break
-		}
-		if p.value.Greater(value) {
+	node = this.root
+	for {
+		if value.Less(node.value) {
 			// leaf
-			if p.left == nil || p.left.is_nil() {
-				node = p
+			if is_nil(node.left) {
 				left_or_right = true
 				break
 			}
-			p = p.left
-		} else {
+			node = node.left
+		} else if node.value.Less(value) {
 			// leaf
-			if p.right == nil || p.right.is_nil() {
-				node = p
+			if is_nil(node.right) {
 				break
 			}
-			p = p.right
+			node = node.right
+		} else {
+			is_equal = true
+			break
 		}
 	}
-
-	if !is_equal && node == nil {
-		fmt.Fprintf(os.Stderr, "cant get insert parent node, may be have error\n")
-	}
-
 	return
 }
 
 func (this *RBTree) rotate_left(node *rbnode) bool {
-	if node == nil || node.is_nil() {
+	if is_nil(node) {
 		return false
 	}
 
 	node_right := node.right
-	if node_right == nil || node_right.is_nil() {
+	if is_nil(node_right) {
 		return false
 	}
 
@@ -128,17 +132,12 @@ func (this *RBTree) rotate_left(node *rbnode) bool {
 	if parent != nil {
 		if node == parent.left {
 			parent.left = node_right
-		} else if node == parent.right {
-			parent.right = node_right
 		} else {
-			fmt.Fprintf(os.Stderr, "node not parent left and not parent right, what is it?")
-			return false
+			parent.right = node_right
 		}
-		node_right.parent = parent
-	} else {
-		node_right.parent = nil
 	}
 
+	node_right.parent = parent
 	node.parent = node_right
 	right_left := node_right.left
 	node_right.left = node
@@ -147,19 +146,18 @@ func (this *RBTree) rotate_left(node *rbnode) bool {
 
 	if node == this.root {
 		this.root = node_right
-		node_right.color = NODE_COLOR_BLACK
 	}
 
 	return true
 }
 
 func (this *RBTree) rotate_right(node *rbnode) bool {
-	if node == nil || node.is_nil() {
+	if is_nil(node) {
 		return false
 	}
 
 	node_left := node.left
-	if node_left == nil || node_left.is_nil() {
+	if is_nil(node_left) {
 		return false
 	}
 
@@ -167,17 +165,12 @@ func (this *RBTree) rotate_right(node *rbnode) bool {
 	if parent != nil {
 		if node == parent.left {
 			parent.left = node_left
-		} else if node == parent.right {
-			parent.right = node_left
 		} else {
-			fmt.Fprintf(os.Stderr, "node not parent left and not parent right, what is it?")
-			return false
+			parent.right = node_left
 		}
-		node_left.parent = parent
-	} else {
-		node_left.parent = nil
 	}
 
+	node_left.parent = parent
 	node.parent = node_left
 	left_right := node_left.right
 	node_left.right = node
@@ -186,21 +179,72 @@ func (this *RBTree) rotate_right(node *rbnode) bool {
 
 	if node == this.root {
 		this.root = node_left
-		node_left.color = NODE_COLOR_BLACK
 	}
 
 	return true
 }
 
-func (this *RBTree) insert(value NodeValue) (node *rbnode) {
+func (this *RBTree) insert_fixup(node *rbnode, left_or_right bool) {
+	for {
+		parent := node.parent
+		if parent == nil || parent.color_is_black() {
+			break
+		}
+		uncle := node.get_uncle()
+		grandparent := node.get_grandparent()
+		if uncle.color_is_red() { // 叔父节点是红色
+			// 变色
+			parent.color_set_black()
+			uncle.color_set_black()
+			grandparent.color_set_red()
+			node = grandparent
+			continue
+		}
+
+		if parent == grandparent.left { // 父节点是祖父节点的左节点
+			if !left_or_right { // 插入节点是父节点的右子节点
+				// 左旋
+				if !this.rotate_left(parent) {
+					return
+				}
+				node, parent = parent, node
+			}
+			// 变色
+			parent.color_set_black()
+			grandparent.color_set_red()
+			// 右旋
+			if !this.rotate_right(grandparent) {
+				return
+			}
+		} else { // 父节点是祖父节点的右节点
+			if left_or_right { // 插入节点是父节点的左子节点
+				// 右旋
+				if !this.rotate_right(parent) {
+					return
+				}
+				node, parent = parent, node
+			}
+			// 变色
+			parent.color_set_black()
+			grandparent.color_set_red()
+			// 左旋
+			if !this.rotate_left(grandparent) {
+				return
+			}
+		}
+	}
+	this.root.color_set_black()
+}
+
+func (this *RBTree) Insert(value NodeValue) {
 	is_equal, insert_parent, left_or_right := this._get_insert_parent(value)
 	if is_equal {
 		insert_parent.value = value
-		return insert_parent
+		return
 	}
 
 	// new node is red
-	node = &rbnode{
+	node := &rbnode{
 		value:  value,
 		color:  NODE_COLOR_RED,
 		left:   nil_node,
@@ -212,7 +256,7 @@ func (this *RBTree) insert(value NodeValue) (node *rbnode) {
 
 	// empty tree
 	if insert_parent == nil {
-		node.color = NODE_COLOR_BLACK
+		node.color_set_black()
 		this.root = node
 		return
 	}
@@ -224,86 +268,62 @@ func (this *RBTree) insert(value NodeValue) (node *rbnode) {
 		insert_parent.right = node
 	}
 
-loop:
-	// insert parent is black
-	if insert_parent.is_black() {
-		return
-	}
-
-	// insert parent is red
-	// has uncle is red
-	uncle := insert_parent.get_brother()
-	if uncle != nil && uncle.is_red() {
-		insert_parent.color = NODE_COLOR_BLACK
-		uncle.color = NODE_COLOR_BLACK
-		gp := insert_parent.parent
-		// 祖父节点为根节点
-		if gp.is_root() {
-			return
-		}
-		gp.color = NODE_COLOR_RED
-		insert_parent = gp
-		goto loop
-	}
-
-	// uncle not exist or is black
-	grandparent := insert_parent.parent //node.get_grandparent()
-	if grandparent == nil {
-		return
-	}
-	if insert_parent == grandparent.left { // 父节点是祖父节点的左节点
-		if left_or_right { // 插入节点是父节点的左子节点
-			// 变色
-			insert_parent.color = NODE_COLOR_BLACK
-			grandparent.color = NODE_COLOR_RED
-			// 右旋
-			if !this.rotate_right(grandparent) {
-				return
-			}
-		} else { // 插入节点是父节点的右子节点
-			// 左旋
-			if !this.rotate_left(insert_parent) {
-				return
-			}
-			// 变色
-			node.color = NODE_COLOR_BLACK
-			grandparent.color = NODE_COLOR_RED
-			// 右旋
-			if !this.rotate_right(grandparent) {
-				return
-			}
-		}
-	} else if insert_parent == grandparent.right { // 父节点是祖父节点的右节点
-		if !left_or_right { // 插入节点是父节点的右子节点
-			// 变色
-			insert_parent.color = NODE_COLOR_BLACK
-			grandparent.color = NODE_COLOR_RED
-			// 左旋
-			if !this.rotate_left(grandparent) {
-				return
-			}
-		} else { // 插入节点是父节点的左子节点
-			// 右旋
-			if !this.rotate_right(insert_parent) {
-				return
-			}
-			// 变色
-			node.color = NODE_COLOR_BLACK
-			grandparent.color = NODE_COLOR_RED
-			// 左旋
-			if !this.rotate_left(grandparent) {
-				return
-			}
-		}
-	} else {
-		fmt.Fprintf(os.Stderr, "insert parent is not grand parent left and right")
-	}
+	this.insert_fixup(node, left_or_right)
 
 	return
 }
 
-func (this *RBTree) Insert(value NodeValue) {
-	this.insert(value)
+func (this *RBTree) get_substitude(node *rbnode) *rbnode {
+	// 先找后继
+	tmp := node.right
+	for !is_nil(tmp) {
+		tmp = tmp.left
+	}
+
+	if is_nil(tmp) {
+		// 再找前驱
+		tmp = node.left
+		for !is_nil(tmp) {
+			tmp = tmp.right
+		}
+	}
+
+	return tmp
+}
+
+func (this *RBTree) Delete(value NodeValue) bool {
+	is_equal, node, _ := this._get_insert_parent(value)
+	if !is_equal {
+		return false
+	}
+
+	has_left := node.left != nil && !node.left.is_nil()
+	has_right := node.right != nil && !node.right.is_nil()
+	// 被删除节点的左右孩子节点都是nil
+	if !has_left && !has_right {
+		if node.color == NODE_COLOR_RED { // 被删除的是红色节点
+			if node == node.parent.left {
+				node.parent.left = nil_node
+			} else {
+				node.parent.right = nil_node
+			}
+		} else { // 被删除的是黑色节点
+			bnode := node.get_brother()
+			if bnode == nil || bnode.is_nil() {
+				fmt.Fprintf(os.Stderr, "rbtree delete black node no brother node")
+				return false
+			}
+			b_has_left := bnode.left != nil && !bnode.left.is_nil()
+			b_has_right := bnode.right != nil && !bnode.right.is_nil()
+			// 兄弟节点的两个子节点都为nil
+			if !b_has_left && !b_has_right {
+				node.parent.color = NODE_COLOR_BLACK
+				bnode.color = NODE_COLOR_RED
+			}
+		}
+	}
+
+	return true
 }
 
 func (this *RBTree) NodeNum() uint32 {

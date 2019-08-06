@@ -157,9 +157,20 @@ func output_nodes(node *rbnode, t *testing.T) {
 
 func Test_ouput_tree(t *testing.T) {
 	var rb RBTree
-	for i := 1; i <= 13; i++ {
+	for i := 29; i >= 1; i-- {
 		rb.Insert(&KeyValue{
 			Key: i,
+		})
+	}
+	output_nodes(rb.root, t)
+}
+
+func Test_output_tree2(t *testing.T) {
+	var rb RBTree
+	value_list := []int{200, 100, -1, 2, 822, 33, 221, 21, 34, 441, 14, 558, 3333, 44, 457, 1, 32, 4, 9, 101, 8, 71, 564, 22323, 4711, 191, 876, 1222}
+	for i := 0; i < len(value_list); i++ {
+		rb.Insert(&KeyValue{
+			Key: value_list[i],
 		})
 	}
 	output_nodes(rb.root, t)

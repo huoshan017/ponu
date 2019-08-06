@@ -47,7 +47,12 @@ func (a *KeyValue) Equal(node rbtree.NodeValue) bool {
 
 func main() {
 	var rb rbtree.RBTree
-	for i := 100; i > 0; i -= 2 {
+	for i := 40; i >= 1; i-- {
+		rb.Insert(&KeyValue{
+			Key: i,
+		})
+	}
+	/*for i := 100; i > 0; i -= 2 {
 		rb.Insert(&KeyValue{
 			Key: i,
 		})
@@ -56,7 +61,7 @@ func main() {
 		rb.Insert(&KeyValue{
 			Key: i,
 		})
-	}
+	}*/
 	fmt.Fprintf(os.Stdout, "node num: %v\n", rb.NodeNum())
 	fmt.Fprintf(os.Stdout, "preorder traverse:\n")
 	rb.PreorderTraverse(func(node rbtree.NodeValue) {
