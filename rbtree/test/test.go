@@ -23,41 +23,9 @@ func (a *KeyValue) Less(node rbtree.NodeValue) bool {
 	return false
 }
 
-func (a *KeyValue) Greater(node rbtree.NodeValue) bool {
-	v := node.(*KeyValue)
-	if v == nil {
-		return false
-	}
-	if a.Key > v.Key {
-		return true
-	}
-	return false
-}
-
-func (a *KeyValue) Equal(node rbtree.NodeValue) bool {
-	v := node.(*KeyValue)
-	if v == nil {
-		return false
-	}
-	if a.Key == v.Key {
-		return true
-	}
-	return false
-}
-
 func main() {
 	var rb rbtree.RBTree
-	for i := 40; i >= 1; i-- {
-		rb.Insert(&KeyValue{
-			Key: i,
-		})
-	}
-	/*for i := 100; i > 0; i -= 2 {
-		rb.Insert(&KeyValue{
-			Key: i,
-		})
-	}
-	for i := 99; i >= 1; i -= 2 {
+	/*for i := 40; i >= 1; i-- {
 		rb.Insert(&KeyValue{
 			Key: i,
 		})
@@ -87,4 +55,18 @@ func main() {
 		}
 		fmt.Fprintf(os.Stdout, "%v\n", n.Key)
 	})
+
+	value_list := []int{200, 100, -1, 2, 822, 33, 221, 21, 34, 441, 14, 558, 3333, 44, 457, 1, 32, 4, 9, 101, 8, 71, 564, 22323, 4711, 191, 876, 1222}
+	for i := 0; i < len(value_list); i++ {
+		rb.Insert(&KeyValue{
+			Key: value_list[i],
+		})
+	}
+
+	delete_value_list := []int{22323, -1}
+	for i := 0; i < len(delete_value_list); i++ {
+		rb.Delete(&KeyValue{
+			Key: delete_value_list[i],
+		})
+	}
 }

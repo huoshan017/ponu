@@ -1,10 +1,5 @@
 package rbtree
 
-import (
-	"fmt"
-	"os"
-)
-
 type NodeValue interface {
 	Less(node NodeValue) bool
 }
@@ -48,6 +43,10 @@ func (this *rbnode) color_set_red() {
 
 func (this *rbnode) color_set_black() {
 	this.color = NODE_COLOR_BLACK
+}
+
+func (this *rbnode) set_color(color uint8) {
+	this.color = color
 }
 
 func (this *rbnode) get_uncle() *rbnode {
@@ -190,8 +189,10 @@ func (this *RBTree) insert_fixup(node *rbnode, left_or_right bool) {
 		if parent == nil || parent.color_is_black() {
 			break
 		}
+
 		uncle := node.get_uncle()
 		grandparent := node.get_grandparent()
+
 		if uncle.color_is_red() { // 叔父节点是红色
 			// 变色
 			parent.color_set_black()
@@ -273,22 +274,63 @@ func (this *RBTree) Insert(value NodeValue) {
 	return
 }
 
-func (this *RBTree) get_substitude(node *rbnode) *rbnode {
-	// 先找后继
+func _get_succcesor(node *rbnode) *rbnode {
 	tmp := node.right
-	for !is_nil(tmp) {
+	for !is_nil(tmp.left) {
 		tmp = tmp.left
 	}
+	return tmp
+}
 
-	if is_nil(tmp) {
-		// 再找前驱
-		tmp = node.left
-		for !is_nil(tmp) {
-			tmp = tmp.right
-		}
+func (this *RBTree) delete_fixup(node *rbnode) {
+	if node.parent == nil {
+		node.color_set_black()
+		return
 	}
 
-	return tmp
+	brother := node.get_brother()
+	if brother.color_is_red() {
+		node.parent.color_set_red()
+		brother.color_set_black()
+		if node == node.parent.left {
+			this.rotate_left(node.parent)
+		} else {
+			this.rotate_right(node.parent)
+		}
+		brother = node.get_brother()
+	}
+	if brother.color_is_black() && brother.left.color_is_black() && brother.right.color_is_black() {
+		if node.parent.color_is_black() {
+			brother.color_set_red()
+			this.delete_fixup(node.parent)
+		} else {
+			brother.color_set_red()
+			node.parent.color_set_black()
+		}
+	} else {
+		if brother.color_is_black() {
+			if node == node.parent.left && brother.left.color_is_red() && brother.right.color_is_black() {
+				brother.color_set_red()
+				brother.left.color_set_black()
+				this.rotate_right(brother.left)
+			} else if node == node.parent.right && brother.left.color_is_black() && brother.right.color_is_red() {
+				brother.color_set_red()
+				brother.right.color_set_black()
+				this.rotate_left(brother.right)
+			}
+			brother = node.get_brother()
+		}
+		brother.set_color(node.parent.color)
+		node.parent.color_set_black()
+		if node == node.parent.left {
+			brother.right.color_set_black()
+			this.rotate_left(node.parent)
+		} else {
+			brother.left.color_set_black()
+			this.rotate_right(node.parent)
+		}
+		brother = node.get_brother()
+	}
 }
 
 func (this *RBTree) Delete(value NodeValue) bool {
@@ -297,33 +339,68 @@ func (this *RBTree) Delete(value NodeValue) bool {
 		return false
 	}
 
-	has_left := node.left != nil && !node.left.is_nil()
-	has_right := node.right != nil && !node.right.is_nil()
-	// 被删除节点的左右孩子节点都是nil
-	if !has_left && !has_right {
-		if node.color == NODE_COLOR_RED { // 被删除的是红色节点
-			if node == node.parent.left {
-				node.parent.left = nil_node
-			} else {
-				node.parent.right = nil_node
-			}
-		} else { // 被删除的是黑色节点
-			bnode := node.get_brother()
-			if bnode == nil || bnode.is_nil() {
-				fmt.Fprintf(os.Stderr, "rbtree delete black node no brother node")
-				return false
-			}
-			b_has_left := bnode.left != nil && !bnode.left.is_nil()
-			b_has_right := bnode.right != nil && !bnode.right.is_nil()
-			// 兄弟节点的两个子节点都为nil
-			if !b_has_left && !b_has_right {
-				node.parent.color = NODE_COLOR_BLACK
-				bnode.color = NODE_COLOR_RED
-			}
-		}
+	if is_nil(node) {
+		return false
+	}
+
+	var su *rbnode
+	if is_nil(node.left) || is_nil(node.right) {
+		su = node
+	} else {
+		// 只有两个子节点都存在才获取后继节点
+		su = _get_succcesor(node)
+	}
+
+	// child可为nil节点
+	var child *rbnode
+	if !is_nil(su.left) {
+		child = su.left
+	} else {
+		child = su.right
+	}
+
+	// 把后继节点的
+	child.parent = su.parent
+	if su.parent.is_root() {
+		this.root = child
+	} else if su == su.parent.left {
+		su.parent.left = child
+	} else {
+		su.parent.right = child
+	}
+
+	if su != node {
+		node.value = su.value
+	}
+
+	if su.color_is_black() {
+		this.delete_fixup(child)
 	}
 
 	return true
+}
+
+func (this *RBTree) Get(value NodeValue) NodeValue {
+	if this.root == nil {
+		return nil
+	}
+
+	var found bool
+	node := this.root
+	for !is_nil(node) {
+		if value.Less(node.value) {
+			node = node.left
+		} else if node.value.Less(value) {
+			node = node.right
+		} else {
+			found = true
+			break
+		}
+	}
+	if !found {
+		node = nil
+	}
+	return node.value
 }
 
 func (this *RBTree) NodeNum() uint32 {

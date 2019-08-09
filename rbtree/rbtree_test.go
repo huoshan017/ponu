@@ -20,28 +20,6 @@ func (a KeyValue) Less(node NodeValue) bool {
 	return false
 }
 
-func (a KeyValue) Greater(node NodeValue) bool {
-	v := node.(*KeyValue)
-	if v == nil {
-		return false
-	}
-	if a.Key > v.Key {
-		return true
-	}
-	return false
-}
-
-func (a KeyValue) Equal(node NodeValue) bool {
-	v := node.(*KeyValue)
-	if v == nil {
-		return false
-	}
-	if a.Key == v.Key {
-		return true
-	}
-	return false
-}
-
 func output_node(node *rbnode, t *testing.T) {
 	n := node.value.(*KeyValue)
 	if n == nil {
@@ -173,5 +151,14 @@ func Test_output_tree2(t *testing.T) {
 			Key: value_list[i],
 		})
 	}
+	output_nodes(rb.root, t)
+
+	delete_value_list := []int{22323, -1, 1, 2}
+	for i := 0; i < len(delete_value_list); i++ {
+		rb.Delete(&KeyValue{
+			Key: delete_value_list[i],
+		})
+	}
+	t.Logf("after delete nodes:")
 	output_nodes(rb.root, t)
 }
