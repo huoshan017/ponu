@@ -324,12 +324,67 @@ func (this *RBTree) delete_fixup(node *rbnode) {
 		node.parent.color_set_black()
 		if node == node.parent.left {
 			brother.right.color_set_black()
-			this.rotate_left(node.parent)
+			this.rotate_left(brother)
 		} else {
 			brother.left.color_set_black()
-			this.rotate_right(node.parent)
+			this.rotate_right(brother)
 		}
 	}
+}
+
+func (this *RBTree) delete_fixup2(node *rbnode) {
+	for node != this.root && node.color_is_black() {
+		if node == node.parent.left {
+			s := node.parent.right
+			if s.color_is_red() {
+				s.color_set_black()
+				node.parent.color_set_red()
+				this.rotate_left(node.parent)
+				s = node.parent.right
+			}
+			if s.left.color_is_black() && s.right.color_is_black() {
+				s.color_set_red()
+				node = node.parent
+			} else {
+				if s.right.color_is_black() {
+					s.left.color_set_black()
+					s.color_set_red()
+					this.rotate_right(s)
+					s = node.parent.right
+				}
+				s.set_color(node.parent.color)
+				node.parent.color_set_black()
+				s.right.color_set_black()
+				this.rotate_left(node.parent)
+				node = this.root
+			}
+		} else {
+			s := node.parent.left
+			if s.color_is_red() {
+				s.color_set_black()
+				node.parent.color_set_red()
+				this.rotate_right(node.parent)
+				s = node.parent.left
+			}
+			if s.left.color_is_black() && s.right.color_is_black() {
+				s.color_set_red()
+				node = node.parent
+			} else {
+				if s.left.color_is_black() {
+					s.right.color_set_black()
+					s.color_set_red()
+					this.rotate_left(s)
+					s = node.parent.left
+				}
+				s.set_color(node.parent.color)
+				node.parent.color_set_black()
+				s.left.color_set_black()
+				this.rotate_right(node.parent)
+				node = this.root
+			}
+		}
+	}
+	node.color_set_black()
 }
 
 func (this *RBTree) Delete(value NodeValue) bool {
@@ -375,7 +430,7 @@ func (this *RBTree) Delete(value NodeValue) bool {
 
 	// 删除的后继节点为黑色时调整
 	if su.color_is_black() {
-		this.delete_fixup(child)
+		this.delete_fixup2(child)
 	}
 
 	return true

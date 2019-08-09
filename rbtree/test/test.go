@@ -63,7 +63,7 @@ func main() {
 		})
 	}
 
-	delete_value_list := []int{22323, -1}
+	delete_value_list := []int{22323, -1, 1, 2, 100, 221}
 	for i := 0; i < len(delete_value_list); i++ {
 		rb.Delete(&KeyValue{
 			Key: delete_value_list[i],
