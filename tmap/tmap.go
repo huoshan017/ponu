@@ -58,7 +58,16 @@ func (this *KeyValue) Less(node rbtree.NodeValue) bool {
 	nt, nv1, nv2, nv3, nv4 := _get_value_from(n.key)
 
 	if kt < 0 || nt < 0 {
-		return false
+		if func() int8 {
+			if kt < 0 {
+				return kt
+			} else {
+				return nt
+			}
+		}() < 0 {
+			fmt.Fprintf(os.Stderr, "tmap: unsupported type %v to compare")
+			return false
+		}
 	}
 
 	if kt != nt {
