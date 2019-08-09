@@ -329,7 +329,6 @@ func (this *RBTree) delete_fixup(node *rbnode) {
 			brother.left.color_set_black()
 			this.rotate_right(node.parent)
 		}
-		brother = node.get_brother()
 	}
 }
 
@@ -359,7 +358,7 @@ func (this *RBTree) Delete(value NodeValue) bool {
 		child = su.right
 	}
 
-	// 把后继节点的
+	// 把后继节点的子节点跟它的父节点关联上
 	child.parent = su.parent
 	if su.parent.is_root() {
 		this.root = child
@@ -369,10 +368,12 @@ func (this *RBTree) Delete(value NodeValue) bool {
 		su.parent.right = child
 	}
 
+	// 赋值
 	if su != node {
 		node.value = su.value
 	}
 
+	// 删除的后继节点为黑色时调整
 	if su.color_is_black() {
 		this.delete_fixup(child)
 	}
