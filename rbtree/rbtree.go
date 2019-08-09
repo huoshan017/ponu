@@ -381,11 +381,10 @@ func (this *RBTree) Delete(value NodeValue) bool {
 	return true
 }
 
-func (this *RBTree) Get(value NodeValue) NodeValue {
+func (this *RBTree) _get(value NodeValue) (NodeValue, bool) {
 	if this.root == nil {
-		return nil
+		return nil, false
 	}
-
 	var found bool
 	node := this.root
 	for !is_nil(node) {
@@ -399,9 +398,19 @@ func (this *RBTree) Get(value NodeValue) NodeValue {
 		}
 	}
 	if !found {
-		return nil
+		return nil, false
 	}
-	return node.value
+	return node.value, true
+}
+
+func (this *RBTree) Get(value NodeValue) NodeValue {
+	v, _ := this._get(value)
+	return v
+}
+
+func (this *RBTree) Has(value NodeValue) bool {
+	_, b := this._get(value)
+	return b
 }
 
 func (this *RBTree) NodeNum() uint32 {

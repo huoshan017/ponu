@@ -115,3 +115,10 @@ func (this *TMap) Get(key interface{}) interface{} {
 	}
 	return (kv.(*KeyValue)).value
 }
+
+func (this *TMap) Has(key interface{}) bool {
+	var kv = KeyValue{
+		key: key,
+	}
+	return this.t.Has(&kv)
+}
