@@ -399,7 +399,7 @@ func (this *RBTree) Get(value NodeValue) NodeValue {
 		}
 	}
 	if !found {
-		node = nil
+		return nil
 	}
 	return node.value
 }
