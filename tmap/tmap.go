@@ -49,8 +49,9 @@ func _get_value_from(i interface{}) (t int8, v1 int64, v2 uint64, v3 float32, v4
 }
 
 func (this *KeyValue) Less(node rbtree.NodeValue) bool {
-	n := node.(*KeyValue)
-	if n == nil {
+	n, b := node.(*KeyValue)
+	if !b {
+		fmt.Fprintf(os.Stderr, "tmap: cant convert rbtree.NodeValue to *KeyValue")
 		return false
 	}
 
