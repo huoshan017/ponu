@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/huoshan017/ponu/rbtree"
 )
@@ -69,4 +70,24 @@ func main() {
 			Key: delete_value_list[i],
 		})
 	}
+
+	n := 1000
+	s := time.Now()
+	for i := 1; i < n; i++ {
+		rb.Insert(&KeyValue{
+			Key: i,
+		})
+	}
+	d := time.Now().Sub(s)
+
+	fmt.Fprintf(os.Stdout, "cost %v\n", d)
+
+	s = time.Now()
+	m := make(map[int]int)
+	for i := 1; i < n; i++ {
+		m[i] = i
+	}
+	d = time.Now().Sub(s)
+
+	fmt.Fprintf(os.Stdout, "cost %v\n", d)
 }
