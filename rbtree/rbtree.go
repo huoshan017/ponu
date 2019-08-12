@@ -282,7 +282,7 @@ func _get_succcesor(node *rbnode) *rbnode {
 	return tmp
 }
 
-func (this *RBTree) delete_fixup(node *rbnode) {
+/*func (this *RBTree) delete_fixup(node *rbnode) {
 	if node.parent == nil {
 		node.color_set_black()
 		return
@@ -330,9 +330,9 @@ func (this *RBTree) delete_fixup(node *rbnode) {
 			this.rotate_right(brother)
 		}
 	}
-}
+}*/
 
-func (this *RBTree) delete_fixup2(node *rbnode) {
+func (this *RBTree) delete_fixup(node *rbnode) {
 	for node != this.root && node.color_is_black() {
 		if node == node.parent.left {
 			s := node.parent.right
@@ -430,7 +430,7 @@ func (this *RBTree) Delete(value NodeValue) bool {
 
 	// 删除的后继节点为黑色时调整
 	if su.color_is_black() {
-		this.delete_fixup2(child)
+		this.delete_fixup(child)
 	}
 
 	return true
