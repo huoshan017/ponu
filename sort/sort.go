@@ -5,16 +5,35 @@ type Elem interface {
 	Equal(e Elem) bool
 }
 
+func less(e1, e2 Elem) bool {
+	return e1.Less(e2)
+}
+
+func greater(e1, e2 Elem) bool {
+	return e2.Less(e1)
+}
+
+func less_equal(e1, e2 Elem) bool {
+	return e1.Less(e2) || e1.Equal(e2)
+}
+
+func greater_equal(e1, e2 Elem) bool {
+	return !e1.Less(e2)
+}
+
+/**
+ * quick sort
+ */
 func qsort_partition(arr []Elem, low, high int) int {
 	pivot := arr[low]
 	for low < high {
-		for low < high && (pivot.Less(arr[high]) || pivot.Equal(arr[high])) {
+		for low < high && less_equal(pivot, arr[high]) {
 			high -= 1
 		}
 		if low < high {
 			arr[low] = arr[high]
 		}
-		for low < high && (arr[low].Less(pivot) || arr[low].Equal(pivot)) {
+		for low < high && less_equal(arr[low], pivot) {
 			low += 1
 		}
 		if low < high {
@@ -32,3 +51,7 @@ func QSort(arr []Elem, low, high int) {
 		QSort(arr, pivot+1, high)
 	}
 }
+
+/**
+ * heap sort
+ */
