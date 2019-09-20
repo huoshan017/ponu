@@ -1,21 +1,20 @@
 package sort
 
-/*type Elem interface {
+type Elem interface {
 	Less(e Elem) bool
-	Greater(e Elem) bool
 	Equal(e Elem) bool
-}*/
+}
 
-func qsort_partition(arr []int, low, high int) int {
+func qsort_partition(arr []Elem, low, high int) int {
 	pivot := arr[low]
 	for low < high {
-		for low < high && arr[high] >= pivot {
+		for low < high && (pivot.Less(arr[high]) || pivot.Equal(arr[high])) {
 			high -= 1
 		}
 		if low < high {
 			arr[low] = arr[high]
 		}
-		for low < high && arr[low] <= pivot {
+		for low < high && (arr[low].Less(pivot) || arr[low].Equal(pivot)) {
 			low += 1
 		}
 		if low < high {
@@ -26,7 +25,7 @@ func qsort_partition(arr []int, low, high int) int {
 	return low
 }
 
-func QSort(arr []int /*Elem*/, low, high int) {
+func QSort(arr []Elem, low, high int) {
 	if low < high {
 		pivot := qsort_partition(arr, low, high)
 		QSort(arr, low, pivot-1)

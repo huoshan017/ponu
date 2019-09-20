@@ -6,34 +6,26 @@ import (
 	"github.com/huoshan017/ponu/sort"
 )
 
-/*type Int int
+type Int int
 
-func (this *Int) Less(e sort.Elem) bool {
-	a := e.(*Int)
-	if *a < *this {
+func (a Int) Less(e sort.Elem) bool {
+	v := e.(Int)
+	if a < v {
 		return true
 	}
 	return false
 }
 
-func (this *Int) Greater(e sort.Elem) bool {
-	a := e.(*Int)
-	if *a > *this {
+func (a Int) Equal(e sort.Elem) bool {
+	v := e.(Int)
+	if a == v {
 		return true
 	}
 	return false
 }
-
-func (this *Int) Equal(e sort.Elem) bool {
-	a := e.(*Int)
-	if *a == *this {
-		return true
-	}
-	return false
-}*/
 
 func main() {
-	arr := []int{100, 90, 91, 1000, 1, 22, 411, 5, 333, 2211}
+	arr := []sort.Elem{Int(100), Int(90), Int(91), Int(1000), Int(1), Int(22), Int(411), Int(5), Int(333), Int(2211)}
 	sort.QSort(arr, 0, len(arr)-1)
 	fmt.Printf("sorted: %v", arr)
 }
