@@ -76,9 +76,7 @@ func heap_adjust_max(arr []Elem, s, m int) {
 		if !arr[s].Less(arr[max]) {
 			break
 		}
-		tmp := arr[s]
-		arr[s] = arr[max]
-		arr[max] = tmp
+		arr[s], arr[max] = arr[max], arr[s]
 		s = max
 	}
 }
@@ -104,9 +102,7 @@ func heap_adjust_min(arr []Elem, s, m int) {
 		if !arr[max].Less(arr[s]) {
 			break
 		}
-		tmp := arr[s]
-		arr[s] = arr[max]
-		arr[max] = tmp
+		arr[s], arr[max] = arr[max], arr[s]
 		s = max
 	}
 }
@@ -116,9 +112,7 @@ func HeapSortMax(arr []Elem) {
 		heap_adjust_max(arr, i, len(arr)-1)
 	}
 	for i := len(arr) - 1; i > 0; i-- {
-		tmp := arr[0]
-		arr[0] = arr[i]
-		arr[i] = tmp
+		arr[0], arr[i] = arr[i], arr[0]
 		heap_adjust_max(arr, 0, i-1)
 	}
 }
@@ -128,9 +122,7 @@ func HeapSortMin(arr []Elem) {
 		heap_adjust_min(arr, i, len(arr)-1)
 	}
 	for i := len(arr) - 1; i > 0; i-- {
-		tmp := arr[0]
-		arr[0] = arr[i]
-		arr[i] = tmp
+		arr[0], arr[i] = arr[i], arr[0]
 		heap_adjust_min(arr, 0, i-1)
 	}
 }
