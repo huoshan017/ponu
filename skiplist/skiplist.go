@@ -13,15 +13,8 @@ type skiplist_layer struct {
 }
 
 type SkiplistNode interface {
-	Less(node interface{}) bool
 	Greater(node interface{}) bool
 	KeyEqual(key interface{}) bool
-	GetKey() interface{}
-	GetValue() interface{}
-	SetValue(interface{})
-	New() SkiplistNode
-	Assign(node SkiplistNode)
-	CopyDataTo(node interface{})
 }
 
 type skiplist_node struct {

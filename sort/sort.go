@@ -126,3 +126,5 @@ func HeapSortMin(arr []Elem) {
 		heap_adjust_min(arr, 0, i-1)
 	}
 }
+
+// ============================== merge sort =============================
