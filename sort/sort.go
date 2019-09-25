@@ -128,3 +128,87 @@ func HeapSortMin(arr []Elem) {
 }
 
 // ============================== merge sort =============================
+func MergeSort(arr []Elem) (out_arr []Elem) {
+	var arr2 []Elem
+	var l = len(arr)
+	if l > 2 {
+		arr2 = make([]Elem, l)
+	}
+
+	var b bool
+	for s := 1; s <= l; s = s * 2 {
+		if s == 1 {
+			merge_first(arr)
+			out_arr = arr
+		} else {
+			if !b {
+				merge(arr, s, arr2)
+				b = true
+			} else {
+				merge(arr2, s, arr)
+				b = false
+			}
+		}
+	}
+	if !b {
+		out_arr = arr
+	} else {
+		out_arr = arr2
+	}
+	return out_arr
+}
+
+// when step is 2
+func merge_first(arr []Elem) {
+	l := len(arr)
+	for s := 0; s < l; s = s + 2 {
+		if s+1 >= l {
+			break
+		}
+		if arr[s+1].Less(arr[s]) {
+			arr[s], arr[s+1] = arr[s+1], arr[s]
+		}
+	}
+}
+
+func merge(arr []Elem, step int, arr2 []Elem) {
+	l := len(arr)
+	var (
+		s, i, j, n int
+	)
+	for s = 0; s < l; s = s + 2*step {
+		i = s
+		if l <= s+step {
+			break
+		}
+		var j2 int
+		if s+step+step > l {
+			j2 = l
+		} else {
+			j2 = s + step + step
+		}
+		j = s + step
+		n = s
+		for i < s+step && j < j2 {
+			if less_equal(arr[i], arr[j]) {
+				arr2[n] = arr[i]
+				i += 1
+			} else {
+				arr2[n] = arr[j]
+				j += 1
+			}
+			n += 1
+		}
+		if i < s+step {
+			for ; i < s+step; i++ {
+				arr2[n] = arr[i]
+				n += 1
+			}
+		} else if j < j2 {
+			for ; j < j2; j++ {
+				arr2[n] = arr[j]
+				n += 1
+			}
+		}
+	}
+}
