@@ -171,42 +171,43 @@ func merge_first(arr []Elem) {
 	}
 }
 
-func merge(arr []Elem, step int, arr2 []Elem) {
-	l := len(arr)
+func merge(arr []Elem, step int, out_arr []Elem) {
 	var (
-		s, i, j, n int
+		s, i, j, n, imax, jmax int
 	)
+	l := len(arr)
 	for s = 0; s < l; s = s + 2*step {
-		i = s
 		if l <= s+step {
 			break
 		}
-		var j2 int
-		if s+step+step > l {
-			j2 = l
-		} else {
-			j2 = s + step + step
-		}
+
+		i = s
 		j = s + step
 		n = s
-		for i < s+step && j < j2 {
+		imax = s + step
+		if s+step+step > l {
+			jmax = l
+		} else {
+			jmax = s + step + step
+		}
+		for i < imax && j < jmax {
 			if less_equal(arr[i], arr[j]) {
-				arr2[n] = arr[i]
+				out_arr[n] = arr[i]
 				i += 1
 			} else {
-				arr2[n] = arr[j]
+				out_arr[n] = arr[j]
 				j += 1
 			}
 			n += 1
 		}
 		if i < s+step {
 			for ; i < s+step; i++ {
-				arr2[n] = arr[i]
+				out_arr[n] = arr[i]
 				n += 1
 			}
-		} else if j < j2 {
-			for ; j < j2; j++ {
-				arr2[n] = arr[j]
+		} else if j < jmax {
+			for ; j < jmax; j++ {
+				out_arr[n] = arr[j]
 				n += 1
 			}
 		}
