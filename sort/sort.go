@@ -143,11 +143,10 @@ func MergeSort(arr []Elem) (out_arr []Elem) {
 		} else {
 			if !b {
 				merge(arr, s, arr2)
-				b = true
 			} else {
 				merge(arr2, s, arr)
-				b = false
 			}
+			b = !b
 		}
 	}
 	if !b {
@@ -200,8 +199,8 @@ func merge(arr []Elem, step int, out_arr []Elem) {
 			}
 			n += 1
 		}
-		if i < s+step {
-			for ; i < s+step; i++ {
+		if i < imax {
+			for ; i < imax; i++ {
 				out_arr[n] = arr[i]
 				n += 1
 			}
