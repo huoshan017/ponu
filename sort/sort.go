@@ -86,24 +86,24 @@ func heap_adjust_min(arr []Elem, s, m int) {
 		m = len(arr) - 1
 	}
 
-	var max int
+	var min int
 	for {
 		left := 2*s + 1
 		if left > m {
 			break
 		}
 		right := 2*s + 2
-		max = left
+		min = left
 		if right <= m {
 			if arr[right].Less(arr[left]) {
-				max = right
+				min = right
 			}
 		}
-		if !arr[max].Less(arr[s]) {
+		if !arr[min].Less(arr[s]) {
 			break
 		}
-		arr[s], arr[max] = arr[max], arr[s]
-		s = max
+		arr[s], arr[min] = arr[min], arr[s]
+		s = min
 	}
 }
 

@@ -26,6 +26,6 @@ func (a Int) Equal(e sort.Elem) bool {
 
 func main() {
 	arr := []sort.Elem{Int(100), Int(90), Int(91), Int(1000), Int(1), Int(22), Int(411), Int(5), Int(333), Int(2211)}
-	sort.QSort(arr)
+	sort.QSort(arr, false)
 	fmt.Printf("sorted: %v", arr)
 }
