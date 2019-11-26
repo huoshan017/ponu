@@ -112,11 +112,12 @@ func (this *TimeSingleWheel) Update() {
 }
 
 type TimeWheel struct {
-	layers     []*timeWheelLayer
-	time_span  time.Duration
-	span_num   uint32
-	timers_map map[*Timer]*list.Element
-	last_time  time.Time
+	layers          []*timeWheelLayer
+	time_span       time.Duration
+	span_num        uint32
+	timers_map      map[*Timer]*list.Element
+	last_time       time.Time
+	curr_span_index uint32
 }
 
 func CreateTimeWheel(slots_num []uint32, time_span time.Duration) *TimeWheel {
@@ -148,17 +149,23 @@ func (this *TimeWheel) AddWithTimeout(timeout time.Duration, fun TimerFunc, args
 		}
 	}()
 
-	n := uint32((timeout + this.time_span - 1) / this.time_span)
-	n = (n + this.span_num) % this.span_num
-	var left_time time.Duration = timeout - time.Duration(n)*this.time_span
-	if left_time < 0 {
-		left_time = 0
+	if timeout == 0 {
+		return nil
 	}
+
+	var n = uint32((timeout + this.time_span - 1) / this.time_span)
+	var cost_n = n
+	if n > this.span_num {
+		cost_n = this.span_num - 1
+	}
+
+	slot_n := (this.curr_span_index + cost_n) % this.span_num
+
 	var layer *timeWheelLayer
 	var layer_n int
-	for layer_n = 0; layer_n < len(this.layers); layer_n++ {
+	for ; layer_n < len(this.layers); layer_n++ {
 		if layer_n > 0 {
-			n /= uint32(len(this.layers[layer_n-1].slots))
+			slot_n /= uint32(len(this.layers[layer_n-1].slots))
 		}
 		if this.layers[layer_n].curr_slot+int(n) < len(this.layers[layer_n].slots) {
 			layer = this.layers[layer_n]
@@ -172,9 +179,9 @@ func (this *TimeWheel) AddWithTimeout(timeout time.Duration, fun TimerFunc, args
 	timer := &Timer{
 		fun:       fun,
 		args:      args,
-		slot:      int(n),
+		slot:      int(slot_n),
 		layer:     layer_n,
-		left_time: left_time,
+		left_time: timeout - time.Duration(cost_n)*this.time_span,
 	}
 	e := layer.slots[n].PushBack(timer)
 	this.timers_map[timer] = e
