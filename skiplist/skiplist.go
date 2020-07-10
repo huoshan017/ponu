@@ -13,8 +13,8 @@ type skiplist_layer struct {
 }
 
 type SkiplistNode interface {
-	Greater(node interface{}) bool
-	KeyEqual(key interface{}) bool
+	FrontTo(node SkiplistNode) bool
+	EqualTo(node SkiplistNode) bool
 }
 
 type skiplist_node struct {
@@ -34,8 +34,11 @@ type Skiplist struct {
 
 func random_skiplist_layer() int32 {
 	n := int32(1)
-	for (rand.Int31()&0xFFFF)%4 == 0 {
+	r := rand.Int31()
+	//for (rand.Int31()&0xFFFF)%4 == 0 {
+	for r%2 == 0 {
 		n += 1
+		r /= 2
 	}
 	if n > MAX_SKIPLIST_LAYER {
 		n = MAX_SKIPLIST_LAYER
@@ -72,7 +75,7 @@ func (this *Skiplist) Insert(v SkiplistNode) int32 {
 		} else {
 			this.rank[i] = this.rank[i+1]
 		}
-		for node.layers[i].next != nil && node.layers[i].next.value.Greater(v) {
+		for node.layers[i].next != nil && node.layers[i].next.value.FrontTo(v) {
 			this.rank[i] += node.layers[i].span
 			node = node.layers[i].next
 		}
@@ -120,12 +123,12 @@ func (this *Skiplist) Insert(v SkiplistNode) int32 {
 func (this *Skiplist) GetNode(v SkiplistNode) (node *skiplist_node) {
 	n := this.head
 	for i := this.curr_layer - 1; i >= 0; i-- {
-		for n.layers[i].next != nil && n.layers[i].next.value.Greater(v) {
+		for n.layers[i].next != nil && n.layers[i].next.value.FrontTo(v) {
 			n = n.layers[i].next
 		}
 		this.before_node[i] = n
 	}
-	if n.layers[0].next != nil && n.layers[0].next.value.KeyEqual(v) {
+	if n.layers[0].next != nil && n.layers[0].next.value.FrontTo(v) {
 		node = n.layers[0].next
 	}
 	return
@@ -158,11 +161,11 @@ func (this *Skiplist) GetByRank(rank int32) (v SkiplistNode) {
 func (this *Skiplist) GetRank(v SkiplistNode) (rank int32) {
 	node := this.head
 	for i := this.curr_layer - 1; i >= 0; i-- {
-		for node.layers[i].next != nil && node.layers[i].next.value.Greater(v) {
+		for node.layers[i].next != nil && node.layers[i].next.value.FrontTo(v) {
 			rank += node.layers[i].span
 			node = node.layers[i].next
 		}
-		if node.layers[i].next != nil && node.layers[i].next.value.KeyEqual(v) {
+		if node.layers[i].next != nil && node.layers[i].next.value.EqualTo(v) {
 			rank += node.layers[i].span
 			return
 		}
@@ -251,6 +254,64 @@ func (this *Skiplist) DeleteByRank(rank int32) bool {
 	return true
 }
 
+func (s *Skiplist) DeleteTail() (SkiplistNode, bool) {
+	var node SkiplistNode
+	if s.tail == nil {
+		node = nil
+		return node, false
+	}
+
+	node = s.tail.value
+
+	for i := int(0); i < len(s.tail.layers); i++ {
+		n := s.tail.layers[i].prev
+		if n != nil {
+			n.layers[i].next = nil
+		}
+	}
+
+	if s.curr_layer > 1 && s.head.layers[s.curr_layer-1].next == nil {
+		s.curr_layer -= 1
+	}
+
+	if s.lengths_num[len(s.tail.layers)-1] > 0 {
+		s.lengths_num[len(s.tail.layers)-1] -= 1
+	}
+
+	if s.curr_length > 0 {
+		s.curr_length -= 1
+	}
+
+	s.tail = s.tail.layers[0].prev
+	return node, true
+}
+
+func (s *Skiplist) GetFirst() (SkiplistNode, bool) {
+	if s.curr_length == 0 {
+		return nil, false
+	}
+
+	node := s.head.layers[0].next.value
+	if node == nil {
+		return nil, false
+	}
+
+	return node, true
+}
+
+func (s *Skiplist) GetTail() (SkiplistNode, bool) {
+	if s.tail == nil {
+		return nil, false
+	}
+
+	node := s.tail.value
+	if node == nil {
+		return nil, false
+	}
+
+	return node, true
+}
+
 func (this *Skiplist) PullList() (nodes []SkiplistNode) {
 	node := this.head
 	for node.layers[0].next != nil {
@@ -273,50 +334,4 @@ func (this *Skiplist) GetLayerLength(layer int32) int32 {
 		return -1
 	}
 	return this.lengths_num[layer-1]
-}
-
-type Int32Value int32
-
-func (this Int32Value) Less(id interface{}) bool {
-	if this < id.(Int32Value) {
-		return true
-	}
-	return false
-}
-
-func (this Int32Value) Greater(id interface{}) bool {
-	if this > id.(Int32Value) {
-		return true
-	}
-	return false
-}
-
-func (this Int32Value) KeyEqual(id interface{}) bool {
-	if this == id {
-		return true
-	}
-	return false
-}
-
-func (this Int32Value) GetKey() interface{} {
-	return this
-}
-
-func (this Int32Value) GetValue() interface{} {
-	return this
-}
-
-func (this Int32Value) SetValue(value interface{}) {
-
-}
-
-func (this Int32Value) New() SkiplistNode {
-	return this
-}
-
-func (this Int32Value) Assign(node SkiplistNode) {
-}
-
-func (this Int32Value) CopyDataTo(node interface{}) {
-
 }
