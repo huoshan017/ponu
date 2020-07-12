@@ -2,6 +2,7 @@ package skiplist
 
 import (
 	"math/rand"
+	"time"
 )
 
 // MaxSkiplistLayer ...
@@ -16,7 +17,7 @@ type skiplistLayer struct {
 // SkiplistNode ...
 type SkiplistNode interface {
 	FrontTo(node SkiplistNode) bool
-	EqualTo(node SkiplistNode) bool
+	KeyEqualTo(node SkiplistNode) bool
 }
 
 type skiplistItem struct {
@@ -33,14 +34,15 @@ type Skiplist struct {
 	tail       *skiplistItem   // 尾节点
 	beforeNode []*skiplistItem // 缓存插入之前或删除之前的节点
 	rank       []int32         // 缓存排名
+	rand       *rand.Rand      // 随机数
 }
 
-func randomSkiplistLayer() int32 {
+func (s *Skiplist) randomSkiplistLayer() int32 {
 	n := int32(1)
-	r := rand.Int31()
+	r := s.rand.Int31()
 	//for (rand.Int31()&0xFFFF)%4 == 0 {
 	for r%2 == 0 {
-		n += 1
+		n++
 		r /= 2
 	}
 	if n > MaxSkiplistLayer {
@@ -68,6 +70,7 @@ func NewSkiplist() *Skiplist {
 		head:       newSkiplistNode(MaxSkiplistLayer, nil),
 		beforeNode: make([]*skiplistItem, MaxSkiplistLayer),
 		rank:       make([]int32, MaxSkiplistLayer),
+		rand:       rand.New(rand.NewSource(time.Now().Unix())),
 	}
 }
 
@@ -87,7 +90,7 @@ func (s *Skiplist) Insert(v SkiplistNode) int32 {
 		s.beforeNode[i] = node
 	}
 
-	newLayer := randomSkiplistLayer()
+	newLayer := s.randomSkiplistLayer()
 	if newLayer > s.currLayer {
 		for i := s.currLayer; i < newLayer; i++ {
 			s.rank[i] = 0
@@ -126,7 +129,7 @@ func (s *Skiplist) Insert(v SkiplistNode) int32 {
 }
 
 // GetNode ...
-func (s *Skiplist) GetNode(v SkiplistNode) (node *skiplistItem) {
+func (s *Skiplist) getNode(v SkiplistNode) (node *skiplistItem) {
 	n := s.head
 	for i := s.currLayer - 1; i >= 0; i-- {
 		for n.layers[i].next != nil && n.layers[i].next.value.FrontTo(v) {
@@ -135,14 +138,14 @@ func (s *Skiplist) GetNode(v SkiplistNode) (node *skiplistItem) {
 		s.beforeNode[i] = n
 	}
 
-	if n.layers[0].next != nil && n.layers[0].next.value.EqualTo(v) {
+	if n.layers[0].next != nil && n.layers[0].next.value.KeyEqualTo(v) {
 		node = n.layers[0].next
 	}
-	return
+	return node
 }
 
 // GetNodeByRank ...
-func (s *Skiplist) GetNodeByRank(rank int32) *skiplistItem {
+func (s *Skiplist) getNodeByRank(rank int32) *skiplistItem {
 	var node *skiplistItem
 	n := s.head
 	currRank := int32(0)
@@ -161,7 +164,7 @@ func (s *Skiplist) GetNodeByRank(rank int32) *skiplistItem {
 
 // GetByRank ...
 func (s *Skiplist) GetByRank(rank int32) (v SkiplistNode) {
-	node := s.GetNodeByRank(rank)
+	node := s.getNodeByRank(rank)
 	if node == nil {
 		return nil
 	}
@@ -176,7 +179,7 @@ func (s *Skiplist) GetRank(v SkiplistNode) (rank int32) {
 			rank += node.layers[i].span
 			node = node.layers[i].next
 		}
-		if node.layers[i].next != nil && node.layers[i].next.value.EqualTo(v) {
+		if node.layers[i].next != nil && node.layers[i].next.value.KeyEqualTo(v) {
 			rank += node.layers[i].span
 			return
 		}
@@ -186,7 +189,7 @@ func (s *Skiplist) GetRank(v SkiplistNode) (rank int32) {
 
 // GetByRankRange ...
 func (s *Skiplist) GetByRankRange(rankStart, rankNum int32, values []SkiplistNode) bool {
-	node := s.GetNodeByRank(rankStart)
+	node := s.getNodeByRank(rankStart)
 	if node == nil || rankNum <= 0 || values == nil {
 		return false
 	}
@@ -245,7 +248,7 @@ func (s *Skiplist) Delete(v SkiplistNode) bool {
 		return false
 	}
 
-	node := s.GetNode(v)
+	node := s.getNode(v)
 	if node == nil {
 		return false
 	}
@@ -260,7 +263,7 @@ func (s *Skiplist) DeleteByRank(rank int32) bool {
 	if s.currLength == 0 {
 		return false
 	}
-	node := s.GetNodeByRank(rank)
+	node := s.getNodeByRank(rank)
 	if node == nil {
 		return false
 	}
@@ -269,6 +272,7 @@ func (s *Skiplist) DeleteByRank(rank int32) bool {
 	return true
 }
 
+// DeleteTail ...
 func (s *Skiplist) DeleteTail() (SkiplistNode, bool) {
 	var node SkiplistNode
 	if s.tail == nil {
@@ -286,21 +290,22 @@ func (s *Skiplist) DeleteTail() (SkiplistNode, bool) {
 	}
 
 	if s.currLayer > 1 && s.head.layers[s.currLayer-1].next == nil {
-		s.currLayer -= 1
+		s.currLayer--
 	}
 
 	if s.lengthsNum[len(s.tail.layers)-1] > 0 {
-		s.lengthsNum[len(s.tail.layers)-1] -= 1
+		s.lengthsNum[len(s.tail.layers)-1]--
 	}
 
 	if s.currLength > 0 {
-		s.currLength -= 1
+		s.currLength--
 	}
 
 	s.tail = s.tail.layers[0].prev
 	return node, true
 }
 
+// GetFirst ...
 func (s *Skiplist) GetFirst() (SkiplistNode, bool) {
 	if s.currLength == 0 {
 		return nil, false
@@ -314,6 +319,7 @@ func (s *Skiplist) GetFirst() (SkiplistNode, bool) {
 	return node, true
 }
 
+// GetTail ...
 func (s *Skiplist) GetTail() (SkiplistNode, bool) {
 	if s.tail == nil {
 		return nil, false
@@ -327,6 +333,7 @@ func (s *Skiplist) GetTail() (SkiplistNode, bool) {
 	return node, true
 }
 
+// PullList ...
 func (s *Skiplist) PullList() (nodes []SkiplistNode) {
 	node := s.head
 	for node.layers[0].next != nil {
