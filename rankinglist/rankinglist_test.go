@@ -26,7 +26,7 @@ func (t *TestType) FrontTo(node skiplist.SkiplistNode) bool {
 	return true
 }
 
-func (t *TestType) EqualTo(node skiplist.SkiplistNode) bool {
+func (t *TestType) KeyEqualTo(node skiplist.SkiplistNode) bool {
 	tt := node.(*TestType)
 	if t.key != tt.key {
 		return false
