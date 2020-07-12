@@ -131,8 +131,35 @@ func (r *RankingList) GetValueByRank(rank int32) (interface{}, bool) {
 	return item.GetValue(), true
 }
 
+// GetItem ...
+func (r *RankingList) GetItem(key interface{}) RankItem {
+	return r._key2Value[key]
+}
+
 // HasKey ...
 func (r *RankingList) HasKey(key interface{}) bool {
 	_, o := r._key2Value[key]
 	return o
+}
+
+// GetByRankRange ...
+func (r *RankingList) GetByRankRange(rankStart, rankNum int32) []interface{} {
+	var nodeList []skiplist.SkiplistNode = make([]skiplist.SkiplistNode, rankNum)
+	if !r._list.GetByRankRange(rankStart, rankNum, nodeList) {
+		return nil
+	}
+
+	var result []interface{}
+	for rank := rankStart; rank < rankStart+rankNum; rank++ {
+		node := r._list.GetByRank(rank)
+		if node == nil {
+			break
+		}
+		rnode := node.(RankItem)
+		if rnode == nil {
+			panic("RankingList.GetByRankRange: cant convert node to RankItem interface type")
+		}
+		result = append(result, rnode.GetValue())
+	}
+	return result
 }
