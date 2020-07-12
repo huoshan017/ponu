@@ -52,6 +52,17 @@ func (r *RankingList) Insert(key interface{}, value interface{}) bool {
 	if !o {
 		return false
 	}
+	if r._maxLength >= len(r._key2Value) {
+		tail, o := r._list.GetTail()
+		if !o {
+			return false
+		}
+		item := tail.(RankItem)
+		if item == nil {
+			return false
+		}
+		if item.FrontTo()
+	}
 	return r.insert(key, value)
 }
 
