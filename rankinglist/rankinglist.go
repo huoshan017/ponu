@@ -15,32 +15,41 @@ type RankItem interface {
 
 // RankingList ...
 type RankingList struct {
-	_list      *skiplist.Skiplist
-	_key2Value map[interface{}]RankItem
-	_maxLength int
-	_type      reflect.Type
+	_list        *skiplist.Skiplist
+	_key2Value   map[interface{}]RankItem
+	_maxLength   int
+	_type        reflect.Type
+	_rankItemObj RankItem
 }
 
 // NewRankingList ...
 func NewRankingList(maxLength int, typ reflect.Type) *RankingList {
-	return &RankingList{
+	rankingList := &RankingList{
 		_list:      skiplist.NewSkiplist(),
 		_key2Value: make(map[interface{}]RankItem, maxLength),
 		_maxLength: maxLength,
 		_type:      typ,
 	}
+	v := reflect.New(typ)
+	rankItem := (v.Elem().Interface()).(RankItem)
+	if rankItem == nil {
+		panic("NewRankingList: reflect value %v cant be convert to RankItem interface type")
+	}
+	rankingList._rankItemObj = rankItem
+	return rankingList
 }
 
 func (r *RankingList) insert(key interface{}, value interface{}) bool {
 	// RankItem.SetValue function
 	v := reflect.New(r._type)
-	m := v.Elem().MethodByName("SetValue")
-	m.Call([]reflect.Value{reflect.ValueOf(value)})
-	// convert to RankItem
 	var rankItem RankItem = (v.Elem().Interface()).(RankItem)
 	if rankItem == nil {
 		panic("RankingList.insert: reflect value %v cant be convert to RankItem interface type")
 	}
+	rankItem.SetValue(value)
+	//m := v.Elem().MethodByName("SetValue")
+	//m.Call([]reflect.Value{reflect.ValueOf(value)})
+	// convert to RankItem
 	r._list.Insert(rankItem)
 	r._key2Value[key] = rankItem
 	return true
@@ -52,16 +61,22 @@ func (r *RankingList) Insert(key interface{}, value interface{}) bool {
 	if !o {
 		return false
 	}
-	if r._maxLength >= len(r._key2Value) {
+	// length is full
+	if r._list.GetLength() > 0 && r._maxLength > 0 && r._maxLength >= len(r._key2Value) {
 		tail, o := r._list.GetTail()
 		if !o {
 			return false
 		}
-		item := tail.(RankItem)
-		if item == nil {
+		t := tail.(RankItem)
+		if t == nil {
 			return false
 		}
-		if item.FrontTo()
+		r._rankItemObj.SetValue(value)
+		// tail value front to insert value
+		if t.FrontTo(r._rankItemObj) {
+			return false
+		}
+		r._list.DeleteTail()
 	}
 	return r.insert(key, value)
 }
