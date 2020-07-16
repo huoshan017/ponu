@@ -34,27 +34,34 @@ func (t *TestType) KeyEqualTo(node skiplist.SkiplistNode) bool {
 	return true
 }
 
+func (t *TestType) InitKeyValues(key interface{}, values ...interface{}) {
+	t.key = key.(int32)
+	t.level = values[0].(int32)
+	t.serialID = values[1].(int64)
+}
+
+func (t *TestType) UpdateValues(values ...interface{}) {
+	l := len(values)
+	if l >= 1 {
+		t.key = values[0].(int32)
+	}
+	if l >= 2 {
+		t.level = values[1].(int32)
+	}
+}
+
 func (t *TestType) GetKey() interface{} {
 	return t.key
 }
 
-func (t *TestType) SetKey(key interface{}) {
-	t.key = key.(int32)
-}
-
-func (t *TestType) GetValue() interface{} {
-	return t.level
-}
-
-func (t *TestType) SetValue(value interface{}) {
-	t.level = value.(int32)
-	t.serialID++
+func (t *TestType) GetValues() []interface{} {
+	return []interface{}{t.level, t.serialID}
 }
 
 func Test_one(t *testing.T) {
-	rankingList := NewRankingList(10000, reflect.TypeOf(TestType{}))
+	rankingList := NewRankingList(10000, reflect.TypeOf(&TestType{}))
 	for i := 0; i < 100; i++ {
-		rankingList.Insert((i+1)*100, i+1)
+		rankingList.Insert((i+1)*100, i+1, i+1)
 	}
 	for key := 100; key <= 1000; key += 100 {
 		value, o := rankingList.GetValue(key)
