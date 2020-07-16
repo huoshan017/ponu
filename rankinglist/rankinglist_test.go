@@ -34,6 +34,14 @@ func (t *TestType) KeyEqualTo(node skiplist.SkiplistNode) bool {
 	return true
 }
 
+func (t *TestType) GetKey() interface{} {
+	return t.key
+}
+
+func (t *TestType) SetKey(key interface{}) {
+	t.key = key.(int32)
+}
+
 func (t *TestType) GetValue() interface{} {
 	return t.level
 }

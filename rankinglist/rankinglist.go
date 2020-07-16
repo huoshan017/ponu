@@ -9,6 +9,8 @@ import (
 // RankItem ...
 type RankItem interface {
 	skiplist.SkiplistNode
+	GetKey() interface{}
+	SetKey(interface{})
 	GetValue() interface{}
 	SetValue(interface{})
 }
@@ -43,9 +45,10 @@ func (r *RankingList) insert(key interface{}, value interface{}) bool {
 	// RankItem.SetValue function
 	v := reflect.New(r._type)
 	var rankItem RankItem = (v.Elem().Interface()).(RankItem)
-	if rankItem == nil {
-		panic("RankingList.insert: reflect value %v cant be convert to RankItem interface type")
-	}
+	//if rankItem == nil {
+	//	panic("RankingList.insert: reflect value %v cant be convert to RankItem interface type")
+	//}
+	rankItem.SetKey(key)
 	rankItem.SetValue(value)
 	//m := v.Elem().MethodByName("SetValue")
 	//m.Call([]reflect.Value{reflect.ValueOf(value)})
@@ -71,6 +74,7 @@ func (r *RankingList) Insert(key interface{}, value interface{}) bool {
 		if t == nil {
 			return false
 		}
+		r._rankItemObj.SetKey(key)
 		r._rankItemObj.SetValue(value)
 		// tail value front to insert value
 		if t.FrontTo(r._rankItemObj) {
@@ -144,17 +148,17 @@ func (r *RankingList) GetValueAndRank(key interface{}) (interface{}, int32, bool
 	return value, rank, true
 }
 
-// GetValueByRank ...
-func (r *RankingList) GetValueByRank(rank int32) (interface{}, bool) {
+// GetKeyValueByRank ...
+func (r *RankingList) GetKeyValueByRank(rank int32) (interface{}, interface{}, bool) {
 	node := r._list.GetByRank(rank)
 	if node == nil {
-		return nil, false
+		return nil, nil, false
 	}
 	item := node.(RankItem)
 	if item == nil {
 		panic("RankingList.GetValueByRank: the node cant convert to RankItem interface type")
 	}
-	return item.GetValue(), true
+	return item.GetKey(), item.GetValue(), true
 }
 
 // GetItem ...
