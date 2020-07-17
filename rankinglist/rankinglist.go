@@ -45,9 +45,6 @@ func (r *RankingList) insert(key interface{}, value ...interface{}) bool {
 	// RankItem.SetValue function
 	v := reflect.New(r._type)
 	var rankItem RankItem = (v.Elem().Interface()).(RankItem)
-	//if rankItem == nil {
-	//	panic("RankingList.insert: reflect value %v cant be convert to RankItem interface type")
-	//}
 	rankItem.InitKeyValues(key, value)
 	//m := v.Elem().MethodByName("SetValue")
 	//m.Call([]reflect.Value{reflect.ValueOf(value)})

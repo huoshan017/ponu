@@ -59,14 +59,14 @@ func (t *TestType) GetValues() []interface{} {
 }
 
 func Test_one(t *testing.T) {
-	rankingList := NewRankingList(10000, reflect.TypeOf(&TestType{}))
-	for i := 0; i < 100; i++ {
+	rankingList := NewRankingList(10000000, reflect.TypeOf(&TestType{}))
+	for i := 0; i < 10000000; i++ {
 		rankingList.Insert((i+1)*100, i+1, i+1)
 	}
-	for key := 100; key <= 1000; key += 100 {
+	/*for key := 100; key <= 10000000; key += 100 {
 		value, o := rankingList.GetValue(key)
 		if o {
 			t.Logf("key is %v, value is %v", key, value)
 		}
-	}
+	}*/
 }
