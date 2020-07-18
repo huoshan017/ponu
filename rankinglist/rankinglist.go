@@ -10,7 +10,6 @@ import (
 type RankItem interface {
 	skiplist.SkiplistNode
 	InitKeyValues(interface{}, ...interface{})
-	UpdateValues(...interface{})
 	GetKey() interface{}
 	GetValues() []interface{}
 }
@@ -28,7 +27,7 @@ type RankingList struct {
 func NewRankingList(maxLength int, typ reflect.Type) *RankingList {
 	rankingList := &RankingList{
 		_list:      skiplist.NewSkiplist(),
-		_key2Value: make(map[interface{}]RankItem, maxLength),
+		_key2Value: make(map[interface{}]RankItem),
 		_maxLength: maxLength,
 		_type:      typ,
 	}
@@ -41,11 +40,11 @@ func NewRankingList(maxLength int, typ reflect.Type) *RankingList {
 	return rankingList
 }
 
-func (r *RankingList) insert(key interface{}, value ...interface{}) bool {
+func (r *RankingList) insert(key interface{}, values ...interface{}) bool {
 	// RankItem.SetValue function
 	v := reflect.New(r._type)
 	var rankItem RankItem = (v.Elem().Interface()).(RankItem)
-	rankItem.InitKeyValues(key, value)
+	rankItem.InitKeyValues(key, values)
 	//m := v.Elem().MethodByName("SetValue")
 	//m.Call([]reflect.Value{reflect.ValueOf(value)})
 	// convert to RankItem

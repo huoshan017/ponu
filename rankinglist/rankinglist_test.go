@@ -40,16 +40,6 @@ func (t *TestType) InitKeyValues(key interface{}, values ...interface{}) {
 	t.serialID = values[1].(int64)
 }
 
-func (t *TestType) UpdateValues(values ...interface{}) {
-	l := len(values)
-	if l >= 1 {
-		t.key = values[0].(int32)
-	}
-	if l >= 2 {
-		t.level = values[1].(int32)
-	}
-}
-
 func (t *TestType) GetKey() interface{} {
 	return t.key
 }
@@ -59,9 +49,10 @@ func (t *TestType) GetValues() []interface{} {
 }
 
 func Test_one(t *testing.T) {
-	rankingList := NewRankingList(10000000, reflect.TypeOf(&TestType{}))
-	for i := 0; i < 10000000; i++ {
-		rankingList.Insert((i+1)*100, i+1, i+1)
+	maxLength := 1000000
+	rankingList := NewRankingList(maxLength, reflect.TypeOf(&TestType{}))
+	for i := 0; i < maxLength; i++ {
+		rankingList.Insert((i + 1), i+100, i+1)
 	}
 	/*for key := 100; key <= 10000000; key += 100 {
 		value, o := rankingList.GetValue(key)
