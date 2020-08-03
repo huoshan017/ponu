@@ -24,13 +24,15 @@ type RankingList struct {
 }
 
 // NewRankingList ...
-func NewRankingList(maxLength int, typ reflect.Type) *RankingList {
+func NewRankingList(typeInterface interface{}, maxLength int) *RankingList {
+	typ := reflect.TypeOf(typeInterface)
 	rankingList := &RankingList{
 		_list:      skiplist.NewSkiplist(),
 		_key2Value: make(map[interface{}]RankItem),
 		_maxLength: maxLength,
 		_type:      typ,
 	}
+	typ.Kind()
 	v := reflect.New(typ)
 	rankItem := (v.Elem().Interface()).(RankItem)
 	if rankItem == nil {

@@ -1,7 +1,6 @@
 package rankinglist
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/huoshan017/ponu/skiplist"
@@ -49,8 +48,8 @@ func (t *TestType) GetValues() []interface{} {
 }
 
 func Test_one(t *testing.T) {
-	maxLength := 1000000
-	rankingList := NewRankingList(maxLength, reflect.TypeOf(&TestType{}))
+	maxLength := 10000000
+	rankingList := NewRankingList(&TestType{}, maxLength)
 	for i := 0; i < maxLength; i++ {
 		rankingList.Insert((i + 1), i+100, i+1)
 	}
