@@ -32,7 +32,6 @@ func NewRankingList(typeInterface interface{}, maxLength int) *RankingList {
 		_maxLength: maxLength,
 		_type:      typ,
 	}
-	typ.Kind()
 	v := reflect.New(typ)
 	rankItem := (v.Elem().Interface()).(RankItem)
 	if rankItem == nil {
