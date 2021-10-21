@@ -32,8 +32,8 @@ func NewRankingList(item RankItem, maxLength int) *RankingList {
 		_maxLength: maxLength,
 		_type:      typ,
 	}
-	v := reflect.New(typ)
-	rankItem := (v.Elem().Interface()).(RankItem)
+	v := reflect.New(typ.Elem())
+	rankItem := (v.Interface()).(RankItem)
 	if rankItem == nil {
 		panic("NewRankingList: reflect value %v cant be convert to RankItem interface type")
 	}
@@ -42,8 +42,8 @@ func NewRankingList(item RankItem, maxLength int) *RankingList {
 }
 
 func (r *RankingList) insert(key interface{}, values ...interface{}) bool {
-	v := reflect.New(r._type)
-	var rankItem RankItem = (v.Elem().Interface()).(RankItem)
+	v := reflect.New(r._type.Elem())
+	var rankItem RankItem = (v.Interface()).(RankItem)
 	rankItem.InitKeyValues(key, values)
 	r._list.Insert(rankItem)
 	r._key2Value[key] = rankItem
