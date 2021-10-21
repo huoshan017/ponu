@@ -27,10 +27,7 @@ func (t *TestType) FrontTo(node skiplist.SkiplistNode) bool {
 
 func (t *TestType) KeyEqualTo(node skiplist.SkiplistNode) bool {
 	tt := node.(*TestType)
-	if t.key != tt.key {
-		return false
-	}
-	return true
+	return t.key == tt.key
 }
 
 func (t *TestType) InitKeyValues(key interface{}, values ...interface{}) {
@@ -53,10 +50,10 @@ func Test_one(t *testing.T) {
 	for i := 0; i < maxLength; i++ {
 		rankingList.Insert((i + 1), i+100, i+1)
 	}
-	/*for key := 100; key <= 10000000; key += 100 {
+	for key := 100; key <= 10000000; key += 100 {
 		value, o := rankingList.GetValue(key)
 		if o {
 			t.Logf("key is %v, value is %v", key, value)
 		}
-	}*/
+	}
 }

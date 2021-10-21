@@ -24,8 +24,8 @@ type RankingList struct {
 }
 
 // NewRankingList ...
-func NewRankingList(typeInterface interface{}, maxLength int) *RankingList {
-	typ := reflect.TypeOf(typeInterface)
+func NewRankingList(item RankItem, maxLength int) *RankingList {
+	typ := reflect.TypeOf(item)
 	rankingList := &RankingList{
 		_list:      skiplist.NewSkiplist(),
 		_key2Value: make(map[interface{}]RankItem),
@@ -42,13 +42,9 @@ func NewRankingList(typeInterface interface{}, maxLength int) *RankingList {
 }
 
 func (r *RankingList) insert(key interface{}, values ...interface{}) bool {
-	// RankItem.SetValue function
 	v := reflect.New(r._type)
 	var rankItem RankItem = (v.Elem().Interface()).(RankItem)
 	rankItem.InitKeyValues(key, values)
-	//m := v.Elem().MethodByName("SetValue")
-	//m.Call([]reflect.Value{reflect.ValueOf(value)})
-	// convert to RankItem
 	r._list.Insert(rankItem)
 	r._key2Value[key] = rankItem
 	return true
