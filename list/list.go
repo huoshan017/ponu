@@ -217,6 +217,9 @@ func (l *List) Clear() {
 }
 
 func (l *List) Begin() Iterator {
+	if l.head == nil {
+		return l.End()
+	}
 	return Iterator{n: l.head}
 }
 
@@ -225,6 +228,9 @@ func (l *List) End() Iterator {
 }
 
 func (l *List) RBegin() Iterator {
+	if l.tail == nil {
+		return l.REnd()
+	}
 	return Iterator{n: l.tail}
 }
 
