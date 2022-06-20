@@ -129,7 +129,7 @@ func (l *List) Insert(val any, after Iterator) {
 func (l *List) insert(val any, after Iterator) *node {
 	n := getNode()
 	n.value = val
-	if after.n == nil {
+	if after.n == nil || after.n == &nullNode {
 		if l.head == nil {
 			l.head = n
 			l.tail = n
@@ -153,7 +153,7 @@ func (l *List) insert(val any, after Iterator) *node {
 }
 
 func (l *List) DeleteContinueNext(iter Iterator) (Iterator, bool) {
-	if iter.n == nil {
+	if iter.n == nil || iter.n == &nullNode {
 		return Iterator{}, false
 	}
 	nn := iter.n.next
@@ -165,7 +165,7 @@ func (l *List) DeleteContinueNext(iter Iterator) (Iterator, bool) {
 }
 
 func (l *List) DeleteContinuePrev(iter Iterator) (Iterator, bool) {
-	if iter.n == nil {
+	if iter.n == nil || iter.n == &nullNode {
 		return Iterator{}, false
 	}
 	np := iter.n.prev
@@ -177,7 +177,7 @@ func (l *List) DeleteContinuePrev(iter Iterator) (Iterator, bool) {
 }
 
 func (l *List) Delete(iter Iterator) bool {
-	if iter.n == nil {
+	if iter.n == nil || iter.n == &nullNode {
 		return false
 	}
 	l.delete(iter)
