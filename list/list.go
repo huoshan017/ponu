@@ -76,6 +76,10 @@ func New() *List {
 	return &List{}
 }
 
+func NewObj() List {
+	return List{}
+}
+
 func (l List) GetLength() int32 {
 	return l.length
 }
