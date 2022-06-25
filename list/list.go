@@ -220,6 +220,20 @@ func (l *List) Clear() {
 	l.length = 0
 }
 
+func (l *List) Front() any {
+	if l.head == nil {
+		return nil
+	}
+	return l.head.value
+}
+
+func (l *List) Back() any {
+	if l.tail == nil {
+		return nil
+	}
+	return l.tail.value
+}
+
 func (l *List) Begin() Iterator {
 	if l.head == nil {
 		return l.End()
