@@ -193,17 +193,18 @@ func newWheel(interval, timerMaxDuration time.Duration) *Wheel {
 }
 
 func (w *Wheel) run() {
-	now := time.Now()
-	w.startTime = now
-	w.stepTicker = time.NewTicker(w.interval)
-	w.lastTickTime = now
-	atomic.StoreInt32(&w.state, 1)
 	defer func() {
 		if err := recover(); err != nil {
 			er := errors.Errorf("%v", err)
 			log.Fatalf("\n%+v", er)
 		}
 	}()
+
+	now := time.Now()
+	w.startTime = now
+	w.stepTicker = time.NewTicker(w.interval)
+	w.lastTickTime = now
+	atomic.StoreInt32(&w.state, 1)
 	for atomic.LoadInt32(&w.state) > 0 {
 		select {
 		case <-w.closeCh:
