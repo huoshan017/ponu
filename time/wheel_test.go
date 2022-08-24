@@ -11,7 +11,7 @@ func TestWheel(t *testing.T) {
 		interval = 20 * time.Millisecond
 		w        = NewWheel(interval, time.Minute)
 		ticker   = time.NewTicker(100 * interval)
-		timer    = time.NewTimer(5000 * interval)
+		timer    = time.NewTimer(10000 * interval)
 
 		ran         = rand.New(rand.NewSource(time.Now().Unix()))
 		n           = 100000
