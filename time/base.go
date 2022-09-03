@@ -1,12 +1,16 @@
 package time
 
-type TimerFunc func(arg any)
+import "time"
+
+type TimerFunc func(arg []any)
 
 type Timer struct {
-	id       uint32
-	fun      TimerFunc
-	arg      any
-	leftStep int32
+	id         uint32
+	fun        TimerFunc
+	arg        []any
+	timeout    time.Duration
+	expireTime time.Time
+	leftStep   int32
 }
 
 func (t *Timer) Clean() {
