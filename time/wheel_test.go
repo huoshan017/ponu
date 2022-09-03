@@ -9,7 +9,7 @@ import (
 func TestWheel(t *testing.T) {
 	const (
 		timeUnit                = time.Millisecond
-		interval          int32 = 30
+		interval          int32 = 10
 		timerMaxDuration  int32 = 400 * interval
 		addTickerDuration int32 = 200 * interval
 		rmTickerDuration  int32 = 200 * interval
@@ -23,7 +23,7 @@ func TestWheel(t *testing.T) {
 		timer    = time.NewTimer(time.Duration(testDuration) * timeUnit)
 
 		ran                 = rand.New(rand.NewSource(time.Now().Unix()))
-		n                   = 500
+		n                   = 5000
 		c                   = 0
 		ac                  = 0
 		loop                = true

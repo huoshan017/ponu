@@ -295,33 +295,38 @@ func (w *Wheel) ReadTimerList() TimerList {
 	return tl
 }
 
-func (w *Wheel) handleStep() {
+func (w *Wheel) stepOne() {
 	var l *list.List
 	for i := 0; i < len(w.layers[w.periodIndex]); i++ {
 		// 不会进入下一层
-		if !w.layers[w.periodIndex][i].toNextSlot() {
-			// 不包括第一层，把该层对应slot的Timer链表取出
-			if i > 0 {
-				l = w.layers[w.periodIndex][i].getCurrListAndRemove()
-				// 处理取出的链表，根据剩余的step数计算出合适的位置放入，没有剩余则插入第一层的当前slot链表中
-				if l != nil {
-					node, o := l.PopFront()
-					for o {
-						t := node.(*Timer)
-						if t.leftStep <= 0 { // 插入到第一层
-							w.layers[w.periodIndex][0].insertTimer(0, t)
-						} else { // 继续插入到合适的位置
-							w.addTimer(t, true)
-						}
-						node, o = l.PopFront()
-						delete(w.id2Pos, t.id)
-					}
-					putList(l)
-				}
-			}
-			break
+		if w.layers[w.periodIndex][i].toNextSlot() {
+			continue
 		}
+		// 不包括第一层，把该层对应slot的Timer链表取出
+		if i > 0 {
+			l = w.layers[w.periodIndex][i].getCurrListAndRemove()
+			// 处理取出的链表，根据剩余的step数计算出合适的位置放入，没有剩余则插入第一层的当前slot链表中
+			if l != nil {
+				node, o := l.PopFront()
+				for o {
+					t := node.(*Timer)
+					if t.leftStep <= 0 { // 插入到第一层
+						w.layers[w.periodIndex][0].insertTimer(0, t)
+					} else { // 继续插入到合适的位置
+						w.addTimer(t, true)
+					}
+					node, o = l.PopFront()
+					delete(w.id2Pos, t.id)
+				}
+				putList(l)
+			}
+		}
+		break
 	}
+}
+
+func (w *Wheel) handleStep() {
+	w.stepOne()
 
 	// 计步
 	w.step += 1
@@ -357,13 +362,16 @@ func (w *Wheel) handleStep() {
 			} else {
 				// no timeout
 				if now.Sub(t.expireTime) < 0 {
-					w.adjustTimer(t)
-					iter, _ = tlist.DeleteContinueNext(iter)
-					continue
+					if w.adjustTimer(t) {
+						iter, _ = tlist.DeleteContinueNext(iter)
+						continue
+					}
 				}
 				iter = iter.Next()
 			}
-			delete(w.id2Pos, t.id)
+			if t.id > 0 {
+				delete(w.id2Pos, t.id)
+			}
 		}
 		w.getCh <- TimerList{l: tlist, m: &w.toDelIdMap}
 	}
@@ -405,6 +413,7 @@ func (w *Wheel) addTimer(t *Timer, update bool) {
 		currLayers          []*wheelLayer
 		cum                 int32
 	)
+
 	if w.step+forwardSlots <= w.maxStep {
 		periodIndex = w.periodIndex
 		currLayers = w.layers[periodIndex]
@@ -417,9 +426,6 @@ func (w *Wheel) addTimer(t *Timer, update bool) {
 			}
 			a := layer.getSize() - layer.getLength()
 			forwardSlots = (forwardSlots - a + layer.getSize() - 1) / layer.getSize()
-		}
-		if layerN >= int32(len(currLayers)) {
-			layer = nil
 		}
 	} else {
 		forwardSlots = (forwardSlots + w.step) - w.maxStep
@@ -434,12 +440,9 @@ func (w *Wheel) addTimer(t *Timer, update bool) {
 				break
 			}
 		}
-		if layerN >= int32(len(currLayers)) {
-			layer = nil
-		}
 	}
 
-	if layer == nil {
+	if layerN >= int32(len(currLayers)) {
 		for i := 0; i < len(w.layers[w.periodIndex]); i++ {
 			log.Printf("      w.layers[%v][%v] length %v", w.periodIndex, i, w.layers[w.periodIndex][i].length)
 		}
@@ -475,14 +478,18 @@ func (w *Wheel) addTimer(t *Timer, update bool) {
 	*/
 }
 
-func (w *Wheel) adjustTimer(t *Timer) {
+func (w *Wheel) adjustTimer(t *Timer) bool {
 	d := time.Until(t.expireTime)
+	if d == 0 {
+		return false
+	}
 	step := int32(d / w.interval)
 	if step == 0 {
 		step = 1
 	}
 	t.leftStep = step
 	w.addTimer(t, true)
+	return true
 }
 
 func (w *Wheel) remove(id uint32) bool {
