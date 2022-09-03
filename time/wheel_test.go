@@ -10,10 +10,10 @@ func TestWheel(t *testing.T) {
 	const (
 		timeUnit                = time.Millisecond
 		interval          int32 = 10
-		timerMaxDuration  int32 = 400 * interval
+		timerMaxDuration  int32 = 4000 * interval
 		addTickerDuration int32 = 200 * interval
 		rmTickerDuration  int32 = 200 * interval
-		testDuration      int32 = 2000 * interval
+		testDuration      int32 = 20000 * interval
 		resetDuration     int32 = timerMaxDuration * 2
 	)
 	var (
