@@ -9,11 +9,11 @@ import (
 func TestWheel(t *testing.T) {
 	const (
 		timeUnit                = time.Millisecond
-		interval          int32 = 10
-		timerMaxDuration  int32 = 4000 * interval
+		interval          int32 = 5
+		timerMaxDuration  int32 = 10000 * interval
 		addTickerDuration int32 = 200 * interval
 		rmTickerDuration  int32 = 200 * interval
-		testDuration      int32 = 20000 * interval
+		testDuration      int32 = 30000 * interval
 		resetDuration     int32 = timerMaxDuration * 2
 	)
 	var (
@@ -23,7 +23,7 @@ func TestWheel(t *testing.T) {
 		timer    = time.NewTimer(time.Duration(testDuration) * timeUnit)
 
 		ran                 = rand.New(rand.NewSource(time.Now().Unix()))
-		n                   = 5000
+		n                   = 50000
 		c                   = 0
 		ac                  = 0
 		loop                = true
@@ -71,7 +71,7 @@ func TestWheel(t *testing.T) {
 						continue
 					}
 					ac += 1
-					t.Logf("@@@ AddNoId timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
+					//t.Logf("@@@ AddNoId timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
 				} else {
 					id := w.Add(time.Duration(r)*timeUnit, fun, []any{r, time.Now()})
 					if id == 0 {
@@ -79,7 +79,7 @@ func TestWheel(t *testing.T) {
 						continue
 					}
 					ac += 1
-					t.Logf("@@@ Add timer func with id %v timeout %+v and steps %v, added %v timer", id, time.Duration(r)*timeUnit, r/interval, ac)
+					//t.Logf("@@@ Add timer func with id %v timeout %+v and steps %v, added %v timer", id, time.Duration(r)*timeUnit, r/interval, ac)
 					if minIdCount == 0 || minIdCount > id {
 						minIdCount = id
 					}
@@ -107,21 +107,23 @@ func TestWheel(t *testing.T) {
 
 	timer.Stop()
 
-	for i := 0; i < len(w.layers); i++ {
-		for j := 0; j < len(w.layers[i]); j++ {
-			t.Logf("Wheel layers:  i %v,  j %v,  length %v,  slots %+v", i, j, w.layers[i][j].length, w.layers[i][j].slots)
-			for k := 0; k < len(w.layers[i][j].slots); k++ {
-				if w.layers[i][j].slots[k] != nil {
-					t.Logf("     w.layers[%v][%v].slots[%v] = %+v", i, j, k, w.layers[i][j].slots[k])
-					var iter = w.layers[i][j].slots[k].Begin()
-					for iter != w.layers[i][j].slots[k].End() {
-						n := iter.Value().(*Timer)
-						t.Logf("			node %+v", *n)
-						iter = iter.Next()
+	/*
+		for i := 0; i < len(w.layers); i++ {
+			for j := 0; j < len(w.layers[i]); j++ {
+				t.Logf("Wheel layers:  i %v,  j %v,  length %v,  slots %+v", i, j, w.layers[i][j].length, w.layers[i][j].slots)
+				for k := 0; k < len(w.layers[i][j].slots); k++ {
+					if w.layers[i][j].slots[k] != nil {
+						t.Logf("     w.layers[%v][%v].slots[%v] = %+v", i, j, k, w.layers[i][j].slots[k])
+						var iter = w.layers[i][j].slots[k].Begin()
+						for iter != w.layers[i][j].slots[k].End() {
+							n := iter.Value().(*Timer)
+							t.Logf("			node %+v", *n)
+							iter = iter.Next()
+						}
 					}
 				}
 			}
 		}
-	}
-	t.Logf("Wheel id2Pos %+v", w.id2Pos)
+		t.Logf("Wheel id2Pos %+v", w.id2Pos)
+	*/
 }

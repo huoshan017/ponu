@@ -11,6 +11,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	minInterval = 5 * time.Millisecond
+)
+
 type wheelLayer struct {
 	slots  []*list.List
 	length int32
@@ -146,7 +150,10 @@ func NewWheel(interval, timerMaxDuration time.Duration) *Wheel {
 }
 
 func newWheel(interval, timerMaxDuration time.Duration) *Wheel {
-	if interval <= 0 || timerMaxDuration < interval {
+	if interval < minInterval {
+		interval = minInterval
+	}
+	if timerMaxDuration < interval {
 		return nil
 	}
 	var (
@@ -190,15 +197,15 @@ func newWheel(interval, timerMaxDuration time.Duration) *Wheel {
 		interval:       interval,
 		maxDuration:    timerMaxDuration,
 		maxStep:        maxStep,
-		getCh:          make(chan TimerList, 256),
+		getCh:          make(chan TimerList, 2048),
 		addCh: make(chan struct {
 			uint32
 			time.Time
 			time.Duration
 			TimerFunc
 			args []any
-		}, 256),
-		removeCh: make(chan uint32, 256),
+		}, 2048),
+		removeCh: make(chan uint32, 512),
 		closeCh:  make(chan struct{}),
 		id2Pos: make(map[uint32]struct {
 			list.Iterator
