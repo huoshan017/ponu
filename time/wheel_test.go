@@ -10,7 +10,7 @@ func TestWheel(t *testing.T) {
 	const (
 		timeUnit                = time.Millisecond
 		interval          int32 = 5
-		timerMaxDuration  int32 = 10000 * interval
+		timerMaxDuration  int32 = 20000 * interval
 		addTickerDuration int32 = 200 * interval
 		rmTickerDuration  int32 = 200 * interval
 		testDuration      int32 = 30000 * interval
@@ -22,14 +22,14 @@ func TestWheel(t *testing.T) {
 		rmTicker = time.NewTicker(time.Duration(rmTickerDuration) * timeUnit)
 		timer    = time.NewTimer(time.Duration(testDuration) * timeUnit)
 
-		ran                 = rand.New(rand.NewSource(time.Now().Unix()))
-		n                   = 50000
-		c                   = 0
-		ac                  = 0
-		loop                = true
-		pauseTicker         = false
-		timerReset          = false
+		ran                        = rand.New(rand.NewSource(time.Now().Unix()))
+		n                   uint32 = uint32(interval)
+		ac                         = 0
+		loop                       = true
+		pauseTicker                = false
+		timerReset                 = false
 		minIdCount, idCount uint32
+		en, tn, rn          uint32
 	)
 
 	for i := 0; i < len(w.layers); i++ {
@@ -51,7 +51,7 @@ func TestWheel(t *testing.T) {
 				break
 			}
 			var fun = TimerFunc(func(args []any) {
-				c += 1
+				en += 1
 				r := args[0].(int32)
 				startTime := args[1].(time.Time)
 				yt := (time.Duration(r) * timeUnit).Milliseconds()
@@ -59,9 +59,9 @@ func TestWheel(t *testing.T) {
 				if yt > st {
 					t.Fatalf("yt(%v) > st(%v)", yt, st)
 				}
-				t.Logf("executed (count: %v) timer func with timeout %+v, cost %v ms", c, yt, st)
+				t.Logf("executed (total count: %v, count: %v, remove count: %v) timer func with timeout %+v, cost %v ms", tn, en, rn, yt, st)
 			})
-			for i := 0; i < n; i++ {
+			for i := 0; i < int(n); i++ {
 				r := interval + ran.Int31n(timerMaxDuration-interval)
 				cc := ran.Int31n(2)
 				now := time.Now()
@@ -86,10 +86,12 @@ func TestWheel(t *testing.T) {
 					idCount = id
 				}
 			}
+			tn += n
 		case <-rmTicker.C:
 			if minIdCount > 0 && idCount-minIdCount >= 10 {
 				w.Remove(minIdCount + uint32(ran.Int63n(int64(idCount-minIdCount))))
 				minIdCount = 0
+				rn += 1
 			}
 		case <-timer.C:
 			if !timerReset {
@@ -107,10 +109,10 @@ func TestWheel(t *testing.T) {
 
 	timer.Stop()
 
-	/*
-		for i := 0; i < len(w.layers); i++ {
-			for j := 0; j < len(w.layers[i]); j++ {
-				t.Logf("Wheel layers:  i %v,  j %v,  length %v,  slots %+v", i, j, w.layers[i][j].length, w.layers[i][j].slots)
+	for i := 0; i < len(w.layers); i++ {
+		for j := 0; j < len(w.layers[i]); j++ {
+			t.Logf("Wheel layers:  i %v,  j %v,  length %v,  slots %+v", i, j, w.layers[i][j].length, w.layers[i][j].slots)
+			/*
 				for k := 0; k < len(w.layers[i][j].slots); k++ {
 					if w.layers[i][j].slots[k] != nil {
 						t.Logf("     w.layers[%v][%v].slots[%v] = %+v", i, j, k, w.layers[i][j].slots[k])
@@ -122,8 +124,8 @@ func TestWheel(t *testing.T) {
 						}
 					}
 				}
-			}
+			*/
 		}
-		t.Logf("Wheel id2Pos %+v", w.id2Pos)
-	*/
+	}
+	t.Logf("Wheel length id2Pos %v", len(w.id2Pos))
 }

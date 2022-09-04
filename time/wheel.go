@@ -120,23 +120,17 @@ type Wheel struct {
 	stepTicker     *time.Ticker
 	getCh          chan TimerList
 	C              <-chan TimerList
-	addCh          chan struct {
-		uint32
-		time.Time
-		time.Duration
-		TimerFunc
-		args []any
-	}
-	removeCh     chan uint32
-	closeCh      chan struct{}
-	closeOnce    sync.Once
-	lastTickTime time.Time
-	lastStepTime time.Time
-	maxStep      int32
-	step         int32
-	state        int32
-	currId       uint32
-	id2Pos       map[uint32]struct {
+	addCh          chan *Timer
+	removeCh       chan uint32
+	closeCh        chan struct{}
+	closeOnce      sync.Once
+	lastTickTime   time.Time
+	lastStepTime   time.Time
+	maxStep        int32
+	step           int32
+	state          int32
+	currId         uint32
+	id2Pos         map[uint32]struct {
 		list.Iterator
 		int32
 	}
@@ -198,15 +192,9 @@ func newWheel(interval, timerMaxDuration time.Duration) *Wheel {
 		maxDuration:    timerMaxDuration,
 		maxStep:        maxStep,
 		getCh:          make(chan TimerList, 2048),
-		addCh: make(chan struct {
-			uint32
-			time.Time
-			time.Duration
-			TimerFunc
-			args []any
-		}, 2048),
-		removeCh: make(chan uint32, 512),
-		closeCh:  make(chan struct{}),
+		addCh:          make(chan *Timer, 2048),
+		removeCh:       make(chan uint32, 512),
+		closeCh:        make(chan struct{}),
 		id2Pos: make(map[uint32]struct {
 			list.Iterator
 			int32
@@ -237,7 +225,7 @@ func (w *Wheel) run() {
 			atomic.StoreInt32(&w.state, 0)
 		case v, o := <-w.addCh:
 			if o {
-				w.addTimeout(v.uint32, v.Time, v.Duration, v.TimerFunc, v.args)
+				w.addTimeout(v)
 			}
 		case id, o := <-w.removeCh:
 			if o {
@@ -262,14 +250,13 @@ func (w *Wheel) Add(timeout time.Duration, fun TimerFunc, args []any) uint32 {
 		return 0
 	}
 	newId := atomic.AddUint32(&w.currId, 1)
-	d := struct {
-		uint32
-		time.Time
-		time.Duration
-		TimerFunc
-		args []any
-	}{newId, time.Now(), timeout, fun, args}
-	w.addCh <- d
+	t := getTimer()
+	t.id = newId
+	t.timeout = timeout
+	t.fun = fun
+	t.arg = args
+	t.expireTime = time.Now().Add(timeout)
+	w.addCh <- t
 	return newId
 }
 
@@ -277,13 +264,12 @@ func (w *Wheel) AddNoId(timeout time.Duration, fun TimerFunc, args []any) bool {
 	if timeout < w.interval || timeout > w.maxDuration {
 		return false
 	}
-	w.addCh <- struct {
-		uint32
-		time.Time
-		time.Duration
-		TimerFunc
-		args []any
-	}{0, time.Now(), timeout, fun, args}
+	t := getTimer()
+	t.timeout = timeout
+	t.fun = fun
+	t.arg = args
+	t.expireTime = time.Now().Add(timeout)
+	w.addCh <- t
 	return true
 }
 
@@ -303,15 +289,24 @@ func (w *Wheel) ReadTimerList() TimerList {
 }
 
 func (w *Wheel) stepOne() {
-	var l *list.List
+	// 计步
+	w.step += 1
+	if w.step > w.maxStep {
+		// 重置layer的数据
+		for i := 0; i < len(w.layers[w.periodIndex]); i++ {
+			w.layers[w.periodIndex][i].reset()
+		}
+		w.step = 1
+		// 切换period
+		w.periodIndex = (w.periodIndex + 1) % 2
+	}
+
 	for i := 0; i < len(w.layers[w.periodIndex]); i++ {
 		// 不会进入下一层
-		if w.layers[w.periodIndex][i].toNextSlot() {
-			continue
-		}
+		toNextLayer := w.layers[w.periodIndex][i].toNextSlot()
 		// 不包括第一层，把该层对应slot的Timer链表取出
 		if i > 0 {
-			l = w.layers[w.periodIndex][i].getCurrListAndRemove()
+			l := w.layers[w.periodIndex][i].getCurrListAndRemove()
 			// 处理取出的链表，根据剩余的step数计算出合适的位置放入，没有剩余则插入第一层的当前slot链表中
 			if l != nil {
 				node, o := l.PopFront()
@@ -328,29 +323,14 @@ func (w *Wheel) stepOne() {
 				putList(l)
 			}
 		}
-		break
+		if !toNextLayer {
+			break
+		}
 	}
 }
 
 func (w *Wheel) handleStep() {
 	w.stepOne()
-
-	// 计步
-	w.step += 1
-	if w.step > w.maxStep {
-		// 重置layer的数据
-		for i := 0; i < len(w.layers[w.periodIndex]); i++ {
-			w.layers[w.periodIndex][i].reset()
-		}
-		w.step = 1
-		// 切换period
-		w.periodIndex = (w.periodIndex + 1) % 2
-		for i := 0; i < len(w.layers[w.periodIndex]); i++ {
-			if !w.layers[w.periodIndex][i].toNextSlot() {
-				break
-			}
-		}
-	}
 	now := time.Now()
 	w.lastStepTime = now
 
@@ -380,7 +360,11 @@ func (w *Wheel) handleStep() {
 				delete(w.id2Pos, t.id)
 			}
 		}
-		w.getCh <- TimerList{l: tlist, m: &w.toDelIdMap}
+		if tlist.GetLength() == 0 {
+			putList(tlist)
+		} else {
+			w.getCh <- TimerList{l: tlist, m: &w.toDelIdMap}
+		}
 	}
 }
 
@@ -396,18 +380,12 @@ func (w *Wheel) handleTick() {
 	}
 }
 
-func (w *Wheel) addTimeout(id uint32, start time.Time, timeout time.Duration, fun TimerFunc, arg []any) {
+func (w *Wheel) addTimeout(t *Timer) {
 	// todo 计算timer的step
-	expireTime := start.Add(timeout)
-	cost := expireTime.Sub(w.lastStepTime)
+	//cost := t.expireTime.Sub(w.lastStepTime)
+	cost := time.Until(t.expireTime) //t.expireTime.Sub(time.Now())
 	step := int32(cost / w.interval)
-	t := getTimer()
-	t.id = id
-	t.fun = fun
-	t.arg = arg
-	t.timeout = timeout
 	t.leftStep = step
-	t.expireTime = expireTime
 	w.addTimer(t, false)
 }
 
@@ -450,9 +428,6 @@ func (w *Wheel) addTimer(t *Timer, update bool) {
 	}
 
 	if layerN >= int32(len(currLayers)) {
-		for i := 0; i < len(w.layers[w.periodIndex]); i++ {
-			log.Printf("      w.layers[%v][%v] length %v", w.periodIndex, i, w.layers[w.periodIndex][i].length)
-		}
 		panic(fmt.Sprintf("time wheel: Not found suitable position to insert time (id: %v,  step: %v,  w.step: %v,  w.periodIndex: %v,  periodIndex: %v,  forwardSlots: %v,  leftSteps: %v)",
 			t.id, steps, w.step, w.periodIndex, periodIndex, forwardSlots, t.leftStep))
 	}
@@ -475,19 +450,11 @@ func (w *Wheel) addTimer(t *Timer, update bool) {
 			int32
 		}{iter, (int32(periodIndex)<<24&0x7f000000 | layerN<<16&0x7fff0000 | (layer.getLength()-1)&0x0000ffff)}
 	}
-
-	/*
-		if !update {
-			log.Printf("add timer  id %v  w.periodIndex %v  periodIndex %v  timeout %v  layerN %v  forwardSlots %v  w.step %v  steps %v  leftSteps %v", t.id, w.periodIndex, periodIndex, t.timeout, layerN, forwardSlots, w.step, steps, t.leftStep)
-		} else {
-			log.Printf("update timer  id %v  w.periodIndex %v  periodIndex %v  timeout %v  layerN %v  forwardSlots %v  w.step %v  steps %v  leftSteps %v", t.id, w.periodIndex, periodIndex, t.timeout, layerN, forwardSlots, w.step, steps, t.leftStep)
-		}
-	*/
 }
 
 func (w *Wheel) adjustTimer(t *Timer) bool {
 	d := time.Until(t.expireTime)
-	if d == 0 {
+	if d <= 0 {
 		return false
 	}
 	step := int32(d / w.interval)
@@ -502,6 +469,7 @@ func (w *Wheel) adjustTimer(t *Timer) bool {
 func (w *Wheel) remove(id uint32) bool {
 	value, o := w.id2Pos[id]
 	if !o {
+		log.Printf("time: wheel remove timer %v failed", id)
 		return false
 	}
 	delete(w.id2Pos, id)
