@@ -60,18 +60,18 @@ func (w *wheelLayer) getCurrListAndRemove() *list.List {
 	return l
 }
 
-func (w *wheelLayer) insertTimer(nextNSlot int32, timer *Timer) (list.Iterator, bool) {
+func (w *wheelLayer) insertTimer(nextNSlot int32, timer *Timer) (list.Iterator, int32) {
 	if nextNSlot > int32(len(w.slots)) {
-		return list.Iterator{}, false
+		return list.Iterator{}, -1
 	}
-	insertSlot := int(w.length-1+nextNSlot) % len(w.slots)
+	insertSlot := (w.length - 1 + nextNSlot) % int32(len(w.slots))
 	l := w.slots[insertSlot]
 	if l == nil {
 		l = getList()
 		w.slots[insertSlot] = l
 	}
 	l.PushBack(timer)
-	return l.RBegin(), true
+	return l.RBegin(), insertSlot
 }
 
 func (w *wheelLayer) insertTimerWithSlot(slot int32, timer *Timer) list.Iterator {
@@ -132,7 +132,9 @@ type Wheel struct {
 	currId         uint32
 	id2Pos         map[uint32]struct {
 		list.Iterator
-		int32
+		uint8
+		int8
+		int16
 	}
 	toDelIdMap sync.Map
 }
@@ -197,7 +199,9 @@ func newWheel(interval, timerMaxDuration time.Duration) *Wheel {
 		closeCh:        make(chan struct{}),
 		id2Pos: make(map[uint32]struct {
 			list.Iterator
-			int32
+			uint8
+			int8
+			int16
 		}),
 	}
 	w.C = w.getCh
@@ -382,8 +386,7 @@ func (w *Wheel) handleTick() {
 
 func (w *Wheel) addTimeout(t *Timer) {
 	// todo 计算timer的step
-	//cost := t.expireTime.Sub(w.lastStepTime)
-	cost := time.Until(t.expireTime) //t.expireTime.Sub(time.Now())
+	cost := time.Until(t.expireTime)
 	step := int32(cost / w.interval)
 	t.leftStep = step
 	w.addTimer(t, false)
@@ -433,10 +436,10 @@ func (w *Wheel) addTimer(t *Timer, update bool) {
 	}
 
 	var iter list.Iterator
+	var pos int32
 	if periodIndex == w.periodIndex {
-		var o bool
-		iter, o = layer.insertTimer(forwardSlots, t)
-		if !o {
+		iter, pos = layer.insertTimer(forwardSlots, t)
+		if pos < 0 {
 			putTimer(t)
 			panic(fmt.Sprintf("time wheel: insert time with forwardSlots %v failed", forwardSlots))
 		}
@@ -447,8 +450,10 @@ func (w *Wheel) addTimer(t *Timer, update bool) {
 	if t.id > 0 {
 		w.id2Pos[t.id] = struct {
 			list.Iterator
-			int32
-		}{iter, (int32(periodIndex)<<24&0x7f000000 | layerN<<16&0x7fff0000 | (layer.getLength()-1)&0x0000ffff)}
+			uint8
+			int8
+			int16
+		}{iter, uint8(periodIndex), int8(layerN), int16(pos)}
 	}
 }
 
@@ -474,8 +479,7 @@ func (w *Wheel) remove(id uint32) bool {
 	}
 	delete(w.id2Pos, id)
 	w.toDelIdMap.Delete(id)
-	periodIndex, layer, cn := value.int32>>24, value.int32>>16&0xffff, value.int32&0xffff
-	return w.layers[periodIndex][layer].removeTimer(cn, value.Iterator)
+	return w.layers[value.uint8][value.int8].removeTimer(int32(value.int16), value.Iterator)
 }
 
 var (

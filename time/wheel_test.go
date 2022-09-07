@@ -129,3 +129,23 @@ func TestWheel(t *testing.T) {
 	}
 	t.Logf("Wheel length id2Pos %v", len(w.id2Pos))
 }
+
+func TestWheelRemoveTimer(t *testing.T) {
+	const (
+		interval = time.Second
+		period   = time.Minute
+	)
+	var w = NewWheel(interval, period)
+	defer w.Stop()
+
+	timeout := 5 * time.Second
+	var tid = w.Add(timeout, func(args []any) {
+		t.Logf("timer timeout after %v", timeout)
+	}, nil)
+
+	time.Sleep(time.Second)
+
+	w.Remove(tid)
+
+	time.Sleep(time.Second)
+}
