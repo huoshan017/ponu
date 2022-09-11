@@ -85,6 +85,9 @@ func (w *wheelLayer) insertTimerWithSlot(slot int32, timer *Timer) list.Iterator
 }
 
 func (w *wheelLayer) removeTimer(slot int32, iter list.Iterator) bool {
+	if w.slots[slot] == nil {
+		return false
+	}
 	return w.slots[slot].Delete(iter)
 }
 
