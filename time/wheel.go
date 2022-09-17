@@ -1,7 +1,6 @@
 package time
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -102,7 +101,7 @@ func (t *TimerList) ExecuteFunc() {
 		timer := node.(*Timer)
 		var del bool
 		if timer.id > 0 {
-			_, del = t.m.Load(timer.id)
+			_, del = t.m.LoadAndDelete(timer.id)
 		}
 		if !del {
 			timer.fun(timer.arg)
@@ -114,104 +113,62 @@ func (t *TimerList) ExecuteFunc() {
 	t.l = nil
 }
 
+type resultChanSender struct {
+	w *Wheel
+}
+
+func (s *resultChanSender) Send(index int32, tlist *list.List) {
+	if s.w.senderChanList[index] == nil {
+		s.w.senderChanList[index] = make(chan TimerList, s.w.options.GetSenderListLength())
+	}
+	s.w.senderChanList[index] <- TimerList{l: tlist, m: &s.w.toDelIdMap}
+}
+
 type Wheel struct {
-	layers         [2][]*wheelLayer
-	periodIndex    int8
-	prevLayersSize []int32
-	interval       time.Duration
-	maxDuration    time.Duration
-	stepTicker     *time.Ticker
-	getCh          chan TimerList
-	C              <-chan TimerList
-	addCh          chan *Timer
-	removeCh       chan uint32
-	closeCh        chan struct{}
-	closeOnce      sync.Once
-	lastTickTime   time.Time
-	lastStepTime   time.Time
-	maxStep        int32
-	step           int32
-	state          int32
-	currId         uint32
-	id2Pos         map[uint32]struct {
+	wheelBase
+	options               Options
+	stepTicker            *time.Ticker
+	addCh                 chan *Timer
+	removeCh              chan uint32
+	senderChanList        []chan TimerList
+	senderChanListCounter int32
+	C                     <-chan TimerList
+	closeCh               chan struct{}
+	closeOnce             sync.Once
+	toDelIdMap            sync.Map
+	resultSender          resultChanSender
+}
+
+func NewWheel(timerMaxDuration time.Duration, options ...Option) *Wheel {
+	var wheel Wheel
+	for _, option := range options {
+		option(&wheel.options)
+	}
+	if timerMaxDuration < wheel.options.GetInterval() {
+		return nil
+	}
+
+	w := &Wheel{}
+	*w = wheel
+	w.wheelBase = *newWheelBase(timerMaxDuration, &w.resultSender, &wheel.options)
+	w.addCh = make(chan *Timer, wheel.options.GetTimerRecvListLength())
+	w.removeCh = make(chan uint32, wheel.options.GetRemoveListLength())
+	w.senderChanList = make([]chan TimerList, wheel.options.GetMaxSenderNum())
+	w.senderChanList[0] = make(chan TimerList, wheel.options.GetSenderListLength())
+	w.C = w.senderChanList[0]
+	w.senderChanListCounter = 1
+	w.closeCh = make(chan struct{})
+	w.id2Pos = make(map[uint32]struct {
 		list.Iterator
 		uint8
 		int8
 		int16
-	}
-	toDelIdMap sync.Map
-}
-
-func NewWheel(interval, timerMaxDuration time.Duration) *Wheel {
-	w := newWheel(interval, timerMaxDuration)
-	go w.run()
+	})
+	w.resultSender = resultChanSender{w: w}
 	return w
 }
 
-func newWheel(interval, timerMaxDuration time.Duration) *Wheel {
-	if interval < minInterval {
-		interval = minInterval
-	}
-	if timerMaxDuration < interval {
-		return nil
-	}
-	var (
-		layers         [2][]*wheelLayer
-		prevLayersSize []int32
-		maxStep, ll    int32
-	)
-	n := int32((timerMaxDuration + interval - 1) / interval)
-	for i := 0; i < len(layers); i++ {
-		if n <= 256 {
-			layers[i] = []*wheelLayer{createWheelLayer(n)}
-			prevLayersSize = []int32{1}
-			maxStep = n
-		} else if n <= 256*64 {
-			ll = (n + 255) / 256
-			layers[i] = []*wheelLayer{createWheelLayer(256), createWheelLayer(ll)}
-			prevLayersSize = []int32{1, 256}
-			maxStep = ll * 256
-		} else if n <= 256*64*64 {
-			ll = (n + 256*64 - 1) / (256 * 64)
-			layers[i] = []*wheelLayer{createWheelLayer(256), createWheelLayer(64), createWheelLayer(ll)}
-			prevLayersSize = []int32{1, 256, 256 * 64}
-			maxStep = ll * 256 * 64
-		} else if n <= 256*64*64*64 {
-			ll = (n + 256*64*64 - 1) / (256 * 64 * 64)
-			layers[i] = []*wheelLayer{createWheelLayer(256), createWheelLayer(64), createWheelLayer(64), createWheelLayer(ll)}
-			prevLayersSize = []int32{1, 256, 256 * 64, 256 * 64 * 64}
-			maxStep = ll * 256 * 64 * 64
-		} else if n <= 256*64*64*64*16 {
-			ll = (n + 256*64*64*64 - 1) / (256 * 64 * 64 * 64)
-			layers[i] = []*wheelLayer{createWheelLayer(256), createWheelLayer(64), createWheelLayer(64), createWheelLayer(64), createWheelLayer(ll)}
-			prevLayersSize = []int32{1, 256, 256 * 64, 256 * 64 * 64, 256 * 64 * 64 * 64}
-			maxStep = ll * 256 * 64 * 64 * 64
-		} else {
-			panic("ponu: greater than time wheel range")
-		}
-	}
-	w := &Wheel{
-		layers:         layers,
-		prevLayersSize: prevLayersSize,
-		interval:       interval,
-		maxDuration:    timerMaxDuration,
-		maxStep:        maxStep,
-		getCh:          make(chan TimerList, 2048),
-		addCh:          make(chan *Timer, 2048),
-		removeCh:       make(chan uint32, 512),
-		closeCh:        make(chan struct{}),
-		id2Pos: make(map[uint32]struct {
-			list.Iterator
-			uint8
-			int8
-			int16
-		}),
-	}
-	w.C = w.getCh
-	return w
-}
-
-func (w *Wheel) run() {
+func (w *Wheel) Run() {
 	defer func() {
 		if err := recover(); err != nil {
 			er := errors.Errorf("%v", err)
@@ -219,16 +176,19 @@ func (w *Wheel) run() {
 		}
 	}()
 
-	now := time.Now()
-	w.stepTicker = time.NewTicker(w.interval)
-	w.lastTickTime = now
-	w.lastStepTime = now
+	w.stepTicker = time.NewTicker(w.options.GetInterval())
+	<-w.stepTicker.C
+	w.lastTickTime = time.Now()
+
 	atomic.StoreInt32(&w.state, 1)
 	for atomic.LoadInt32(&w.state) > 0 {
 		select {
 		case <-w.closeCh:
-			close(w.getCh)
-			w.getCh = nil
+			for i := 0; i < len(w.senderChanList); i++ {
+				close(w.senderChanList[i])
+			}
+			w.senderChanList = []chan TimerList{nil}
+			atomic.StoreInt32(&w.senderChanListCounter, 1)
 			atomic.StoreInt32(&w.state, 0)
 		case v, o := <-w.addCh:
 			if o {
@@ -253,30 +213,19 @@ func (w *Wheel) Stop() {
 }
 
 func (w *Wheel) Add(timeout time.Duration, fun TimerFunc, args []any) uint32 {
-	if timeout < w.interval || timeout > w.maxDuration {
+	if timeout < w.options.GetInterval() || timeout > w.maxDuration {
 		return 0
 	}
 	newId := atomic.AddUint32(&w.currId, 1)
-	t := getTimer()
-	t.id = newId
-	t.timeout = timeout
-	t.fun = fun
-	t.arg = args
-	t.expireTime = time.Now().Add(timeout)
-	w.addCh <- t
+	w.add(0, newId, timeout, fun, args)
 	return newId
 }
 
-func (w *Wheel) AddNoId(timeout time.Duration, fun TimerFunc, args []any) bool {
-	if timeout < w.interval || timeout > w.maxDuration {
+func (w *Wheel) Post(timeout time.Duration, fun TimerFunc, args []any) bool {
+	if timeout < w.options.GetInterval() || timeout > w.maxDuration {
 		return false
 	}
-	t := getTimer()
-	t.timeout = timeout
-	t.fun = fun
-	t.arg = args
-	t.expireTime = time.Now().Add(timeout)
-	w.addCh <- t
+	w.add(0, 0, timeout, fun, args)
 	return true
 }
 
@@ -285,204 +234,35 @@ func (w *Wheel) AddWithDeadline(deadline time.Time, fun TimerFunc, args []any) u
 	return w.Add(duration, fun, args)
 }
 
-func (w *Wheel) Remove(id uint32) {
+func (w *Wheel) PostWithDeadline(deadline time.Time, fun TimerFunc, args []any) {
+	duration := time.Until(deadline)
+	w.Post(duration, fun, args)
+}
+
+func (w *Wheel) Cancel(id uint32) {
 	w.toDelIdMap.LoadOrStore(id, true)
 	w.removeCh <- id
 }
 
 func (w *Wheel) ReadTimerList() TimerList {
-	tl := <-w.getCh
+	tl := <-w.senderChanList[0]
 	return tl
 }
 
-func (w *Wheel) stepOne() {
-	// 计步
-	w.step += 1
-	if w.step > w.maxStep {
-		// 重置layer的数据
-		for i := 0; i < len(w.layers[w.periodIndex]); i++ {
-			w.layers[w.periodIndex][i].reset()
-		}
-		w.step = 1
-		// 切换period
-		w.periodIndex = (w.periodIndex + 1) % 2
-	}
-
-	for i := 0; i < len(w.layers[w.periodIndex]); i++ {
-		// 不会进入下一层
-		toNextLayer := w.layers[w.periodIndex][i].toNextSlot()
-		// 不包括第一层，把该层对应slot的Timer链表取出
-		if i > 0 {
-			l := w.layers[w.periodIndex][i].getCurrListAndRemove()
-			// 处理取出的链表，根据剩余的step数计算出合适的位置放入，没有剩余则插入第一层的当前slot链表中
-			if l != nil {
-				node, o := l.PopFront()
-				for o {
-					t := node.(*Timer)
-					if t.leftStep <= 0 { // 插入到第一层
-						w.layers[w.periodIndex][0].insertTimer(0, t)
-					} else { // 继续插入到合适的位置
-						w.addTimer(t, true)
-					}
-					node, o = l.PopFront()
-					delete(w.id2Pos, t.id)
-				}
-				putList(l)
-			}
-		}
-		if !toNextLayer {
-			break
-		}
-	}
+func (w *Wheel) add(idx int32, id uint32, timeout time.Duration, fun TimerFunc, args []any) {
+	t := getTimer()
+	t.senderIndex = idx
+	t.id = id
+	t.timeout = timeout
+	t.fun = fun
+	t.arg = args
+	t.expireTime = time.Now().Add(timeout)
+	w.addCh <- t
 }
 
-func (w *Wheel) handleStep() {
-	w.stepOne()
-	now := time.Now()
-	w.lastStepTime = now
-
-	// 取出当前层slot中的链表，处理Timer
-	var tlist = w.layers[w.periodIndex][0].getCurrListAndRemove()
-	if tlist != nil && tlist.GetLength() > 0 {
-		for iter := tlist.Begin(); iter != tlist.End(); {
-			t := iter.Value().(*Timer)
-			var toDel bool
-			if t.id > 0 {
-				_, toDel = w.toDelIdMap.Load(t.id)
-			}
-			if toDel {
-				iter, _ = tlist.DeleteContinueNext(iter)
-				putTimer(t)
-			} else {
-				// no timeout
-				if now.Sub(t.expireTime) < 0 {
-					if w.adjustTimer(t) {
-						iter, _ = tlist.DeleteContinueNext(iter)
-						continue
-					}
-				}
-				iter = iter.Next()
-			}
-			if t.id > 0 {
-				delete(w.id2Pos, t.id)
-			}
-		}
-		if tlist.GetLength() == 0 {
-			putList(tlist)
-		} else {
-			w.getCh <- TimerList{l: tlist, m: &w.toDelIdMap}
-		}
-	}
-}
-
-func (w *Wheel) handleTick() {
-	lastTickTime := time.Now()
-	d := lastTickTime.Sub(w.lastTickTime)
-	for d >= w.interval {
-		w.handleStep()
-		d -= w.interval
-	}
-	if d > 0 {
-		w.lastTickTime = lastTickTime.Add(-d)
-	}
-}
-
-func (w *Wheel) addTimeout(t *Timer) {
-	// todo 计算timer的step
-	cost := time.Until(t.expireTime)
-	step := int32(cost / w.interval)
-	t.leftStep = step
-	w.addTimer(t, false)
-}
-
-func (w *Wheel) addTimer(t *Timer, update bool) {
-	var (
-		layer               *wheelLayer
-		layerN              int32
-		forwardSlots, steps int32 = t.leftStep, t.leftStep
-		periodIndex         int8
-		currLayers          []*wheelLayer
-		cum                 int32
-	)
-
-	if w.step+forwardSlots <= w.maxStep {
-		periodIndex = w.periodIndex
-		currLayers = w.layers[periodIndex]
-		for layerN = int32(0); layerN < int32(len(currLayers)); layerN++ {
-			layer = currLayers[layerN]
-			cum += layer.getLength() * w.prevLayersSize[layerN]
-			if forwardSlots <= layer.getSize() {
-				t.leftStep -= (layer.getLength()+forwardSlots)*w.prevLayersSize[layerN] - cum
-				break
-			}
-			a := layer.getSize() - layer.getLength()
-			forwardSlots = (forwardSlots - a + layer.getSize() - 1) / layer.getSize()
-		}
-	} else {
-		forwardSlots = (forwardSlots + w.step) - w.maxStep
-		t.leftStep = forwardSlots
-		periodIndex = (w.periodIndex + 1) % 2
-		currLayers = w.layers[periodIndex]
-		for layerN = int32(0); layerN < int32(len(currLayers)); layerN++ {
-			layer = currLayers[layerN]
-			forwardSlots = (forwardSlots + w.prevLayersSize[layerN] - 1) / w.prevLayersSize[layerN]
-			if forwardSlots <= layer.getSize() {
-				t.leftStep -= (forwardSlots - 1) * w.prevLayersSize[layerN]
-				break
-			}
-		}
-	}
-
-	if layerN >= int32(len(currLayers)) {
-		panic(fmt.Sprintf("time wheel: Not found suitable position to insert time (id: %v,  step: %v,  w.step: %v,  w.periodIndex: %v,  periodIndex: %v,  forwardSlots: %v,  leftSteps: %v)",
-			t.id, steps, w.step, w.periodIndex, periodIndex, forwardSlots, t.leftStep))
-	}
-
-	var iter list.Iterator
-	var pos int32
-	if periodIndex == w.periodIndex {
-		iter, pos = layer.insertTimer(forwardSlots, t)
-		if pos < 0 {
-			putTimer(t)
-			panic(fmt.Sprintf("time wheel: insert time with forwardSlots %v failed", forwardSlots))
-		}
-	} else {
-		iter = layer.insertTimerWithSlot(forwardSlots-1, t)
-	}
-
-	if t.id > 0 {
-		w.id2Pos[t.id] = struct {
-			list.Iterator
-			uint8
-			int8
-			int16
-		}{iter, uint8(periodIndex), int8(layerN), int16(pos)}
-	}
-}
-
-func (w *Wheel) adjustTimer(t *Timer) bool {
-	d := time.Until(t.expireTime)
-	if d <= 0 {
-		return false
-	}
-	step := int32(d / w.interval)
-	if step == 0 {
-		step = 1
-	}
-	t.leftStep = step
-	w.addTimer(t, true)
-	return true
-}
-
-func (w *Wheel) remove(id uint32) bool {
-	value, o := w.id2Pos[id]
-	if !o {
-		log.Printf("time: wheel remove timer %v failed", id)
-		return false
-	}
-	delete(w.id2Pos, id)
+func (w *Wheel) remove(id uint32) {
+	w.wheelBase.remove(id)
 	w.toDelIdMap.Delete(id)
-	return w.layers[value.uint8][value.int8].removeTimer(int32(value.int16), value.Iterator)
 }
 
 var (

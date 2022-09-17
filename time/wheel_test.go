@@ -17,13 +17,11 @@ func TestWheel(t *testing.T) {
 		resetDuration     int32 = timerMaxDuration * 2
 	)
 	var (
-		w        = NewWheel(time.Duration(interval)*timeUnit, time.Duration(timerMaxDuration)*timeUnit)
-		ticker   = time.NewTicker(time.Duration(addTickerDuration) * timeUnit)
-		rmTicker = time.NewTicker(time.Duration(rmTickerDuration) * timeUnit)
-		timer    = time.NewTimer(time.Duration(testDuration) * timeUnit)
+		w     = NewWheel(time.Duration(timerMaxDuration)*timeUnit, WithInterval(time.Duration(interval)*timeUnit))
+		timer = time.NewTimer(time.Duration(testDuration) * timeUnit)
 
 		ran                        = rand.New(rand.NewSource(time.Now().Unix()))
-		n                   uint32 = uint32(interval)
+		n                   uint32 = uint32(interval) * 50
 		ac                         = 0
 		loop                       = true
 		pauseTicker                = false
@@ -40,6 +38,9 @@ func TestWheel(t *testing.T) {
 
 	t.Logf("max steps %v", w.maxStep)
 
+	go w.Run()
+	ticker := time.NewTicker(time.Duration(addTickerDuration) * timeUnit)
+	rmTicker := time.NewTicker(time.Duration(rmTickerDuration) * timeUnit)
 	rmTicker.C = nil
 
 	for loop {
@@ -59,21 +60,21 @@ func TestWheel(t *testing.T) {
 				if yt > st {
 					t.Fatalf("yt(%v) > st(%v)", yt, st)
 				}
-				t.Logf("executed (total count: %v, count: %v, remove count: %v) timer func with timeout %+v, cost %v ms", tn, en, rn, yt, st)
+				t.Logf("executed (total count: %v, count: %v, to remove count: %v) timer func with timeout %+v, cost %v ms", tn, en, rn, yt, st)
 			})
+			now := time.Now()
 			for i := 0; i < int(n); i++ {
 				r := interval + ran.Int31n(timerMaxDuration-interval)
 				cc := ran.Int31n(2)
-				now := time.Now()
 				if cc == 0 {
-					if !w.AddNoId(time.Duration(r)*timeUnit, fun, []any{r, now}) {
-						t.Fatalf("@@@ AddNoId failed with timeout %v", r)
+					if !w.Post(time.Duration(r)*timeUnit, fun, []any{r, now}) {
+						t.Fatalf("@@@ Post failed with timeout %v", r)
 						continue
 					}
 					ac += 1
-					//t.Logf("@@@ AddNoId timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
+					//t.Logf("@@@ Post timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
 				} else {
-					id := w.Add(time.Duration(r)*timeUnit, fun, []any{r, time.Now()})
+					id := w.Add(time.Duration(r)*timeUnit, fun, []any{r, now})
 					if id == 0 {
 						t.Fatalf("@@@ Add failed with timeout %v", r)
 						continue
@@ -89,9 +90,11 @@ func TestWheel(t *testing.T) {
 			tn += n
 		case <-rmTicker.C:
 			if minIdCount > 0 && idCount-minIdCount >= 10 {
-				w.Remove(minIdCount + uint32(ran.Int63n(int64(idCount-minIdCount))))
+				id := minIdCount + uint32(ran.Int63n(int64(idCount-minIdCount)))
+				w.Cancel(id)
 				minIdCount = 0
 				rn += 1
+				t.Logf("@@@ to remove timer %v", id)
 			}
 		case <-timer.C:
 			if !timerReset {
@@ -130,13 +133,14 @@ func TestWheel(t *testing.T) {
 	t.Logf("Wheel length id2Pos %v", len(w.id2Pos))
 }
 
-func TestWheelRemoveTimer(t *testing.T) {
+func TestWheelCancelTimer(t *testing.T) {
 	const (
 		interval = time.Second
 		period   = time.Minute
 	)
-	var w = NewWheel(interval, period)
+	var w = NewWheel(period, WithInterval(interval))
 	defer w.Stop()
+	go w.Run()
 
 	timeout := 5 * time.Second
 	var tid = w.Add(timeout, func(args []any) {
@@ -145,7 +149,11 @@ func TestWheelRemoveTimer(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	w.Remove(tid)
+	w.Cancel(tid)
 
 	time.Sleep(time.Second)
+}
+
+func TestSender(t *testing.T) {
+
 }
