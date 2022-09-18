@@ -4,6 +4,7 @@ import "time"
 
 const (
 	defaultInterval            = 33 * time.Millisecond
+	minInterval                = 5 * time.Millisecond
 	defaultTimerRecvListLength = 2048
 	defaultRemoveListLength    = 512
 	defaultSendNum             = 1

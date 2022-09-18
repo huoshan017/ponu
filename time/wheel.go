@@ -10,109 +10,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	minInterval = 5 * time.Millisecond
-)
-
-type wheelLayer struct {
-	slots  []*list.List
-	length int32
-}
-
-func createWheelLayer(slot_num int32) *wheelLayer {
-	twl := &wheelLayer{}
-	twl.slots = make([]*list.List, slot_num)
-	return twl
-}
-
-func (w *wheelLayer) getSize() int32 {
-	return int32(len(w.slots))
-}
-
-func (w *wheelLayer) getLength() int32 {
-	return w.length
-}
-
-func (w *wheelLayer) reset() {
-	w.length = 0
-}
-
-func (w *wheelLayer) toNextSlot() (toNextLayer bool) {
-	// 开始进入此layer和结束进入下一个layer都表示toNextLayer
-	if w.length == 0 || int(w.length) >= len(w.slots) {
-		w.length = 1
-		toNextLayer = true
-	} else {
-		w.length += 1
-	}
-	return
-}
-
-func (w *wheelLayer) getCurrListAndRemove() *list.List {
-	if w.length <= 0 {
-		return nil
-	}
-	l := w.slots[w.length-1]
-	if l != nil {
-		w.slots[w.length-1] = nil
-	}
-	return l
-}
-
-func (w *wheelLayer) insertTimer(nextNSlot int32, timer *Timer) (list.Iterator, int32) {
-	if nextNSlot > int32(len(w.slots)) {
-		return list.Iterator{}, -1
-	}
-	insertSlot := (w.length - 1 + nextNSlot) % int32(len(w.slots))
-	l := w.slots[insertSlot]
-	if l == nil {
-		l = getList()
-		w.slots[insertSlot] = l
-	}
-	l.PushBack(timer)
-	return l.RBegin(), insertSlot
-}
-
-func (w *wheelLayer) insertTimerWithSlot(slot int32, timer *Timer) list.Iterator {
-	l := w.slots[slot]
-	if l == nil {
-		l = getList()
-		w.slots[slot] = l
-	}
-	l.PushBack(timer)
-	return l.RBegin()
-}
-
-func (w *wheelLayer) removeTimer(slot int32, iter list.Iterator) bool {
-	if w.slots[slot] == nil {
-		return false
-	}
-	return w.slots[slot].Delete(iter)
-}
-
-type TimerList struct {
-	l *list.List
-	m *sync.Map
-}
-
-func (t *TimerList) ExecuteFunc() {
-	node, o := t.l.PopFront()
-	for o {
-		timer := node.(*Timer)
-		var del bool
-		if timer.id > 0 {
-			_, del = t.m.LoadAndDelete(timer.id)
-		}
-		if !del {
-			timer.fun(timer.arg)
-		}
-		putTimer(timer)
-		node, o = t.l.PopFront()
-	}
-	putList(t.l)
-	t.l = nil
-}
-
 type resultChanSender struct {
 	w *Wheel
 }
@@ -140,30 +37,24 @@ type Wheel struct {
 }
 
 func NewWheel(timerMaxDuration time.Duration, options ...Option) *Wheel {
-	var wheel Wheel
+	var ops Options
 	for _, option := range options {
-		option(&wheel.options)
+		option(&ops)
 	}
-	if timerMaxDuration < wheel.options.GetInterval() {
+	if timerMaxDuration < ops.GetInterval() {
 		return nil
 	}
 
 	w := &Wheel{}
-	*w = wheel
-	w.wheelBase = *newWheelBase(timerMaxDuration, &w.resultSender, &wheel.options)
-	w.addCh = make(chan *Timer, wheel.options.GetTimerRecvListLength())
-	w.removeCh = make(chan uint32, wheel.options.GetRemoveListLength())
-	w.senderChanList = make([]chan TimerList, wheel.options.GetMaxSenderNum())
-	w.senderChanList[0] = make(chan TimerList, wheel.options.GetSenderListLength())
+	w.options = ops
+	w.wheelBase = *newWheelBase(timerMaxDuration, &w.resultSender, &w.options)
+	w.addCh = make(chan *Timer, w.options.GetTimerRecvListLength())
+	w.removeCh = make(chan uint32, w.options.GetRemoveListLength())
+	w.senderChanList = make([]chan TimerList, w.options.GetMaxSenderNum())
+	w.senderChanList[0] = make(chan TimerList, w.options.GetSenderListLength())
 	w.C = w.senderChanList[0]
 	w.senderChanListCounter = 1
 	w.closeCh = make(chan struct{})
-	w.id2Pos = make(map[uint32]struct {
-		list.Iterator
-		uint8
-		int8
-		int16
-	})
 	w.resultSender = resultChanSender{w: w}
 	return w
 }
@@ -234,9 +125,9 @@ func (w *Wheel) AddWithDeadline(deadline time.Time, fun TimerFunc, args []any) u
 	return w.Add(duration, fun, args)
 }
 
-func (w *Wheel) PostWithDeadline(deadline time.Time, fun TimerFunc, args []any) {
+func (w *Wheel) PostWithDeadline(deadline time.Time, fun TimerFunc, args []any) bool {
 	duration := time.Until(deadline)
-	w.Post(duration, fun, args)
+	return w.Post(duration, fun, args)
 }
 
 func (w *Wheel) Cancel(id uint32) {

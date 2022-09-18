@@ -21,9 +21,11 @@ func testConcurrentList(t *testing.T, length int32) {
 
 	wg.Add(count)
 	go func() {
-		for i := 0; i < count; i++ {
-			cl.PopFront()
-			wg.Done()
+		for i := 0; i < count; {
+			if _, o := cl.PopFrontNonBlock(); o {
+				wg.Done()
+				i += 1
+			}
 		}
 	}()
 

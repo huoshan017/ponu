@@ -3,6 +3,7 @@ package time
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/huoshan017/ponu/list"
@@ -18,6 +19,7 @@ type Timer struct {
 	expireTime  time.Time
 	senderIndex int32
 	leftStep    int32
+	triggerTime time.Time
 }
 
 func (t *Timer) Clean() {
@@ -25,6 +27,106 @@ func (t *Timer) Clean() {
 	t.arg = nil
 	t.fun = nil
 	t.leftStep = 0
+}
+
+type wheelLayer struct {
+	slots  []*list.List
+	length int32
+}
+
+func createWheelLayer(slot_num int32) *wheelLayer {
+	twl := &wheelLayer{}
+	twl.slots = make([]*list.List, slot_num)
+	return twl
+}
+
+func (w *wheelLayer) getSize() int32 {
+	return int32(len(w.slots))
+}
+
+func (w *wheelLayer) getLength() int32 {
+	return w.length
+}
+
+func (w *wheelLayer) reset() {
+	w.length = 0
+}
+
+func (w *wheelLayer) toNextSlot() (toNextLayer bool) {
+	// 开始进入此layer和结束进入下一个layer都表示toNextLayer
+	if w.length == 0 || int(w.length) >= len(w.slots) {
+		w.length = 1
+		toNextLayer = true
+	} else {
+		w.length += 1
+	}
+	return
+}
+
+func (w *wheelLayer) getCurrListAndRemove() *list.List {
+	if w.length <= 0 {
+		return nil
+	}
+	l := w.slots[w.length-1]
+	if l != nil {
+		w.slots[w.length-1] = nil
+	}
+	return l
+}
+
+func (w *wheelLayer) insertTimer(nextNSlot int32, timer *Timer) (list.Iterator, int32) {
+	if nextNSlot > int32(len(w.slots)) {
+		return list.Iterator{}, -1
+	}
+	insertSlot := (w.length - 1 + nextNSlot) % int32(len(w.slots))
+	l := w.slots[insertSlot]
+	if l == nil {
+		l = getList()
+		w.slots[insertSlot] = l
+	}
+	l.PushBack(timer)
+	return l.RBegin(), insertSlot
+}
+
+func (w *wheelLayer) insertTimerWithSlot(slot int32, timer *Timer) list.Iterator {
+	l := w.slots[slot]
+	if l == nil {
+		l = getList()
+		w.slots[slot] = l
+	}
+	l.PushBack(timer)
+	return l.RBegin()
+}
+
+func (w *wheelLayer) removeTimer(slot int32, iter list.Iterator) bool {
+	if w.slots[slot] == nil {
+		return false
+	}
+	return w.slots[slot].Delete(iter)
+}
+
+type TimerList struct {
+	l *list.List
+	m *sync.Map
+}
+
+func (t *TimerList) ExecuteFunc() {
+	node, o := t.l.PopFront()
+	for o {
+		timer := node.(*Timer)
+		var del bool
+		if timer.id > 0 {
+			_, del = t.m.LoadAndDelete(timer.id)
+		}
+		if !del {
+			timer.arg = append(timer.arg, timer.triggerTime)
+			timer.fun(timer.arg)
+		}
+		putTimer(timer)
+		node, o = t.l.PopFront()
+	}
+	putList(t.l)
+	t.l = nil
 }
 
 type wheelBase struct {
@@ -105,6 +207,12 @@ func newWheelBase(timerMaxDuration time.Duration, resultSender IResultSender, op
 	wheel.prevLayersSize = prevLayersSize
 	wheel.maxDuration = timerMaxDuration
 	wheel.maxStep = maxStep
+	wheel.id2Pos = make(map[uint32]struct {
+		list.Iterator
+		uint8
+		int8
+		int16
+	})
 	wheel.index2List = make(map[int32]*list.List)
 	return wheel
 }
@@ -163,6 +271,7 @@ func (w *wheelBase) addTimer(t *Timer, update bool) {
 	var iter list.Iterator
 	var pos int32
 	if periodIndex == w.periodIndex {
+		//log.Printf("steps %v,  forwardSlots %v", steps, forwardSlots)
 		iter, pos = layer.insertTimer(forwardSlots, t)
 		if pos < 0 {
 			putTimer(t)
@@ -278,10 +387,12 @@ func (w *wheelBase) handleStep() {
 				continue
 			}
 		}
+
+		t.triggerTime = now
 		// 处理不同sender的timer
 		if t.senderIndex > 0 {
-			l := w.index2List[t.senderIndex]
-			if l == nil {
+			l, o := w.index2List[t.senderIndex]
+			if !o || l == nil {
 				l = getList()
 				w.index2List[t.senderIndex] = l
 			}
@@ -317,13 +428,16 @@ func (w *wheelBase) handleStep() {
 }
 
 func (w *wheelBase) handleTick() {
-	lastTickTime := time.Now()
-	d := lastTickTime.Sub(w.lastTickTime)
+	now := time.Now()
+	if w.lastTickTime.IsZero() {
+		w.lastTickTime = now
+	}
+	d := now.Sub(w.lastTickTime)
 	for d >= w.options.GetInterval() {
 		w.handleStep()
 		d -= w.options.GetInterval()
-	}
-	if d > 0 {
-		w.lastTickTime = lastTickTime.Add(-d)
+		if d > 0 && d < w.options.GetInterval() {
+			w.lastTickTime = now.Add(-d)
+		}
 	}
 }
