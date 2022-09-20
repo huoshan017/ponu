@@ -136,12 +136,13 @@ type wheelBase struct {
 	layers         [2][]*wheelLayer
 	periodIndex    int8
 	prevLayersSize []int32
-	lastTickTime   time.Time
-	maxStep        int32
-	step           int32
-	state          int32
-	currId         uint32
-	id2Pos         map[uint32]struct {
+	//lastTickTime   time.Time
+	nextTickTime time.Time
+	maxStep      int32
+	step         int32
+	state        int32
+	currId       uint32
+	id2Pos       map[uint32]struct {
 		list.Iterator
 		uint8
 		int8
@@ -185,7 +186,7 @@ func newWheelBase(timerMaxDuration time.Duration, resultSender IResultSender, op
 			prevLayersSize = []int32{1, 256}
 			maxStep = ll * 256
 		} else if n <= 256*64*64 {
-			ll = (n + 256*64 - 1) / (256 * 64)
+			ll = (n + 256*64 - 1) / (256 * 64) // todo 是减 1 吗？？？
 			layers[i] = []*wheelLayer{createWheelLayer(256), createWheelLayer(64), createWheelLayer(ll)}
 			prevLayersSize = []int32{1, 256, 256 * 64}
 			maxStep = ll * 256 * 64
@@ -217,12 +218,42 @@ func newWheelBase(timerMaxDuration time.Duration, resultSender IResultSender, op
 	return wheel
 }
 
-func (w *wheelBase) addTimeout(t *Timer) {
+func (w *wheelBase) start() {
+	w.nextTickTime = time.Now().Add(w.options.GetInterval())
+}
+
+func (w *wheelBase) addTimeout(t *Timer) bool {
+	if w.nextTickTime.IsZero() {
+		return false
+	}
+
 	// todo 计算timer的step
-	cost := time.Until(t.expireTime)
-	step := int32(cost / w.options.GetInterval())
-	t.leftStep = step
+	now := time.Now()
+	cost := t.expireTime.Sub(now)
+	if cost <= 0 {
+		t.leftStep = 0
+	} else {
+		var step int32
+		d := w.nextTickTime.Sub(now)
+		if d < 0 { // 说明handleTick没有及时调用，很可能是调用频率有问题或者前面的某些操作耗时过长
+			w.handleTick()
+			d = w.nextTickTime.Sub(now)
+		}
+		if d > 0 {
+			cost -= d
+			if cost >= 0 {
+				step += 1
+			}
+		}
+		interval := w.options.GetInterval()
+		step = int32(cost / interval)
+		if cost%interval > 0 {
+			step += 1
+		}
+		t.leftStep = step
+	}
 	w.addTimer(t, false)
+	return true
 }
 
 func (w *wheelBase) addTimer(t *Timer, update bool) {
@@ -235,12 +266,16 @@ func (w *wheelBase) addTimer(t *Timer, update bool) {
 		cum                 int32
 	)
 
+	//|<->|<->|<->|<->| 第一层
+	//|<------------->|<------------>|<------------>| 第二层
+	//|<------------------------------------------->|<--------------------------------------->|<-------------------------------------->| 第三层
+	//|<------------------------------------------------------------------------------------------------------------------------------>|<--------------------------------------------------------------------------------------------------------------------------->|
 	if w.step+forwardSlots <= w.maxStep {
 		periodIndex = w.periodIndex
 		currLayers = w.layers[periodIndex]
 		for layerN = int32(0); layerN < int32(len(currLayers)); layerN++ {
 			layer = currLayers[layerN]
-			cum += layer.getLength() * w.prevLayersSize[layerN]
+			cum = layer.getLength()*w.prevLayersSize[layerN] - cum
 			if forwardSlots <= layer.getSize() {
 				t.leftStep -= (layer.getLength()+forwardSlots)*w.prevLayersSize[layerN] - cum
 				break
@@ -271,12 +306,12 @@ func (w *wheelBase) addTimer(t *Timer, update bool) {
 	var iter list.Iterator
 	var pos int32
 	if periodIndex == w.periodIndex {
-		//log.Printf("steps %v,  forwardSlots %v", steps, forwardSlots)
 		iter, pos = layer.insertTimer(forwardSlots, t)
 		if pos < 0 {
 			putTimer(t)
 			panic(fmt.Sprintf("time wheel: insert time with forwardSlots %v failed", forwardSlots))
 		}
+		//log.Printf("timerId: %v, steps %v,  forwardSlots %v,  steps %v,  layerN %v,  layer %+v,  leftSteps %v", t.id, steps, forwardSlots, steps, layerN, layer, t.leftStep)
 	} else {
 		iter = layer.insertTimerWithSlot(forwardSlots-1, t)
 	}
@@ -427,17 +462,23 @@ func (w *wheelBase) handleStep() {
 	}
 }
 
-func (w *wheelBase) handleTick() {
-	now := time.Now()
-	if w.lastTickTime.IsZero() {
-		w.lastTickTime = now
+func (w *wheelBase) handleTick() bool {
+	if w.nextTickTime.IsZero() {
+		panic("ponu.time wheelBase lastTickTime not initialize")
 	}
-	d := now.Sub(w.lastTickTime)
-	for d >= w.options.GetInterval() {
-		w.handleStep()
-		d -= w.options.GetInterval()
-		if d > 0 && d < w.options.GetInterval() {
-			w.lastTickTime = now.Add(-d)
-		}
+	var (
+		now      = time.Now()
+		interval = w.options.GetInterval()
+		d        = now.Sub(w.nextTickTime)
+		c        int32
+	)
+	for d >= 0 { // 多数情况下，d是[0, interval)区间内的数
+		w.handleStep() // 保证每个interval一定要执行一次handleStep
+		d -= interval
+		c += 1
 	}
+	if c > 0 {
+		w.nextTickTime = w.nextTickTime.Add(time.Duration(c) * w.options.GetInterval())
+	}
+	return c > 0
 }

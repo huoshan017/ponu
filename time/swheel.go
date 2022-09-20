@@ -42,8 +42,12 @@ func NewSWheel(timerMaxDuration time.Duration, options ...Option) *SWheel {
 	return w
 }
 
-func (w *SWheel) Update() {
-	w.handleTick()
+func (w *SWheel) Start() {
+	w.start()
+}
+
+func (w *SWheel) Update() bool {
+	return w.handleTick()
 }
 
 func (w *SWheel) Add(timeout time.Duration, fun TimerFunc, args []any) uint32 {
@@ -77,7 +81,7 @@ func (w *SWheel) Cancel(id uint32) bool {
 	return w.wheelBase.remove(id)
 }
 
-func (w *SWheel) add(index int32, id uint32, timeout time.Duration, fun TimerFunc, args []any) {
+func (w *SWheel) add(index int32, id uint32, timeout time.Duration, fun TimerFunc, args []any) bool {
 	t := getTimer()
 	t.senderIndex = 0
 	t.id = id
@@ -85,5 +89,9 @@ func (w *SWheel) add(index int32, id uint32, timeout time.Duration, fun TimerFun
 	t.fun = fun
 	t.arg = args
 	t.expireTime = time.Now().Add(timeout)
-	w.addTimeout(t)
+	if !w.addTimeout(t) {
+		putTimer(t)
+		return false
+	}
+	return true
 }

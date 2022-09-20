@@ -132,7 +132,7 @@ func (w *WheelX) Run() {
 		}
 	}()
 
-	w.lastTickTime = time.Now()
+	w.start()
 
 	atomic.StoreInt32(&w.state, 1)
 	for atomic.LoadInt32(&w.state) > 0 {
