@@ -2,6 +2,7 @@ package time
 
 import (
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 )
@@ -57,7 +58,7 @@ func TestWheelTimerMaxDuration(t *testing.T) {
 			}
 			now := time.Now()
 			for i := int32(0); i < count; i++ {
-				duration := timerMaxDuration - 10*i*interval
+				duration := timerMaxDuration - 10*(i+1)*interval
 				id := w.Add(time.Duration(duration)*timeUnit, fun, []any{duration, now})
 				if id == 0 {
 					t.Fatalf("@@@ Add failed with timeout %v", duration)
@@ -80,110 +81,125 @@ func TestWheelTimerMaxDuration(t *testing.T) {
 func TestWheel(t *testing.T) {
 	const (
 		timeUnit                = time.Millisecond
-		interval          int32 = 5
+		interval          int32 = 10
 		timerMaxDuration  int32 = 20000 * interval
-		addTickerDuration int32 = 200 * interval
-		rmTickerDuration  int32 = 200 * interval
+		addTickerDuration int32 = 400 * interval
+		rmTickerDuration  int32 = 400 * interval
 		testDuration      int32 = 30000 * interval
 		resetDuration     int32 = timerMaxDuration * 2
 	)
-	var (
-		w     = NewWheel(time.Duration(timerMaxDuration)*timeUnit, WithInterval(time.Duration(interval)*timeUnit))
-		timer = time.NewTimer(time.Duration(testDuration) * timeUnit)
 
-		ran                        = rand.New(rand.NewSource(time.Now().Unix()))
-		n                   uint32 = uint32(interval) * 20
-		ac                         = 0
-		loop                       = true
-		pauseTicker                = false
-		timerReset                 = false
-		minIdCount, idCount uint32
-		en, tn, rn          uint32
-	)
+	w := NewWheel(time.Duration(timerMaxDuration)*timeUnit, WithInterval(time.Duration(interval)*timeUnit), WithTimerRecvListLength(100000))
+	defer w.Stop()
 
 	for i := 0; i < len(w.layers); i++ {
 		for j := 0; j < len(w.layers[i]); j++ {
 			t.Logf("layer[%v][%v] %+v", i, j, w.layers[i][j])
 		}
 	}
-
 	t.Logf("max steps %v", w.maxStep)
 
 	go w.Run()
-	ticker := time.NewTicker(time.Duration(addTickerDuration) * timeUnit)
-	rmTicker := time.NewTicker(time.Duration(rmTickerDuration) * timeUnit)
-	rmTicker.C = nil
 
-	for loop {
-		select {
-		case d := <-w.C:
-			d.ExecuteFunc()
-		case <-ticker.C:
-			if pauseTicker {
-				break
-			}
-			var fun = TimerFunc(func(args []any) {
-				en += 1
-				r := args[0].(int32)
-				startTime := args[1].(time.Time)
-				triggerTime := args[2].(time.Time)
-				yt := (time.Duration(r) * timeUnit).Milliseconds()
-				st := time.Since(startTime).Milliseconds()
-				tt := triggerTime.Sub(startTime).Milliseconds()
-				if yt > st {
-					t.Fatalf("yt(%v) > st(%v)", yt, st)
+	var c int = 10
+	var wg sync.WaitGroup
+	wg.Add(c)
+	for i := 0; i < c; i++ {
+		go func(index int) {
+			var (
+				timer                      = time.NewTimer(time.Duration(testDuration) * timeUnit)
+				ran                        = rand.New(rand.NewSource(time.Now().Unix()))
+				n                   uint32 = uint32(interval) * 200
+				ac                         = 0
+				loop                       = true
+				pauseTicker                = false
+				timerReset                 = false
+				minIdCount, idCount uint32
+				en, tn, rn          uint32
+			)
+
+			ticker := time.NewTicker(time.Duration(addTickerDuration) * timeUnit)
+			rmTicker := time.NewTicker(time.Duration(rmTickerDuration) * timeUnit)
+			rmTicker.C = nil
+			sender := w.NewSender()
+
+			for loop {
+				select {
+				case d := <-sender.C():
+					d.ExecuteFunc()
+				case <-ticker.C:
+					if pauseTicker {
+						break
+					}
+					var fun = TimerFunc(func(args []any) {
+						en += 1
+						r := args[0].(int32)
+						startTime := args[1].(time.Time)
+						triggerTime := args[2].(time.Time)
+						yt := (time.Duration(r) * timeUnit).Milliseconds()
+						st := time.Since(startTime).Milliseconds()
+						tt := triggerTime.Sub(startTime).Milliseconds()
+						if yt > st {
+							t.Errorf("yt(%v) > st(%v)", yt, st)
+						}
+						if st-yt > int64(2*interval) {
+							t.Logf("index(%v) executed (total count: %v, count: %v, to remove count: %v) timer func with timeout %+v, cost %v ms (diff %v), trigger %v ms (diff %v)",
+								index, tn, en, rn, yt, st, st-yt, tt, tt-yt)
+						}
+					})
+					now := time.Now()
+					for i := 0; i < int(n); i++ {
+						r := interval + ran.Int31n(timerMaxDuration-interval)
+						cc := ran.Int31n(2)
+						if cc == 0 {
+							if !sender.Post(time.Duration(r)*timeUnit, fun, []any{r, now}) {
+								t.Errorf("@@@ Post failed with timeout %v", r)
+								continue
+							}
+							ac += 1
+							//t.Logf("@@@ Post timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
+						} else {
+							id := sender.Add(time.Duration(r)*timeUnit, fun, []any{r, now})
+							if id == 0 {
+								t.Errorf("@@@ Add failed with timeout %v", r)
+								continue
+							}
+							ac += 1
+							//t.Logf("@@@ Add timer func with id %v timeout %+v and steps %v, added %v timer", id, time.Duration(r)*timeUnit, r/interval, ac)
+							if minIdCount == 0 || minIdCount > id {
+								minIdCount = id
+							}
+							idCount = id
+						}
+					}
+					tn += n
+				case <-rmTicker.C:
+					if minIdCount > 0 && idCount-minIdCount >= 10 {
+						id := minIdCount + uint32(ran.Int63n(int64(idCount-minIdCount)))
+						sender.Cancel(id)
+						minIdCount = 0
+						rn += 1
+						t.Logf("@@@ index(%v) to remove timer %v", index, id)
+					}
+				case <-timer.C:
+					if !timerReset {
+						timer.Reset(time.Duration(resetDuration) * timeUnit)
+						timerReset = true
+						pauseTicker = true
+						t.Logf("index(%v)  timer reset, and ticker pause", index)
+					} else {
+						ticker.Stop()
+						loop = false
+					}
 				}
-				t.Logf("executed (total count: %v, count: %v, to remove count: %v) timer func with timeout %+v, cost %v ms (diff %v), trigger %v ms (diff %v)", tn, en, rn, yt, st, st-yt, tt, tt-yt)
-			})
-			now := time.Now()
-			for i := 0; i < int(n); i++ {
-				r := interval + ran.Int31n(timerMaxDuration-interval)
-				cc := ran.Int31n(2)
-				if cc == 0 {
-					if !w.Post(time.Duration(r)*timeUnit, fun, []any{r, now}) {
-						t.Fatalf("@@@ Post failed with timeout %v", r)
-						continue
-					}
-					ac += 1
-					//t.Logf("@@@ Post timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
-				} else {
-					id := w.Add(time.Duration(r)*timeUnit, fun, []any{r, now})
-					if id == 0 {
-						t.Fatalf("@@@ Add failed with timeout %v", r)
-						continue
-					}
-					ac += 1
-					//t.Logf("@@@ Add timer func with id %v timeout %+v and steps %v, added %v timer", id, time.Duration(r)*timeUnit, r/interval, ac)
-					if minIdCount == 0 || minIdCount > id {
-						minIdCount = id
-					}
-					idCount = id
-				}
 			}
-			tn += n
-		case <-rmTicker.C:
-			if minIdCount > 0 && idCount-minIdCount >= 10 {
-				id := minIdCount + uint32(ran.Int63n(int64(idCount-minIdCount)))
-				w.Cancel(id)
-				minIdCount = 0
-				rn += 1
-				t.Logf("@@@ to remove timer %v", id)
-			}
-		case <-timer.C:
-			if !timerReset {
-				timer.Reset(time.Duration(resetDuration) * timeUnit)
-				timerReset = true
-				pauseTicker = true
-				t.Logf("timer reset, and ticker pause")
-			} else {
-				ticker.Stop()
-				w.Stop()
-				loop = false
-			}
-		}
+
+			timer.Stop()
+			wg.Done()
+		}(i)
 	}
 
-	timer.Stop()
+	wg.Wait()
 
 	for i := 0; i < len(w.layers); i++ {
 		for j := 0; j < len(w.layers[i]); j++ {
@@ -225,31 +241,6 @@ func TestWheelX(t *testing.T) {
 		resetDuration     int32 = timerMaxDuration * 2
 	)
 
-	var (
-		ran                        = rand.New(rand.NewSource(time.Now().Unix()))
-		n                   uint32 = uint32(interval) * 10
-		ac                         = 0
-		loop                       = true
-		pauseTicker                = false
-		timerReset                 = false
-		minIdCount, idCount uint32
-		en, tn, rn          uint32
-	)
-
-	var fun = TimerFunc(func(args []any) {
-		en += 1
-		r := args[0].(int32)
-		startTime := args[1].(time.Time)
-		triggerTime := args[2].(time.Time)
-		yt := (time.Duration(r) * timeUnit).Milliseconds()
-		st := time.Since(startTime).Milliseconds()
-		ts := triggerTime.Sub(startTime).Milliseconds()
-		if yt > st {
-			t.Fatalf("yt(%v) > st(%v)", yt, st)
-		}
-		t.Logf("executed (total count: %v, count: %v, to remove count: %v) timer func with timeout %+v, cost %v ms (diff %v), trigger %v ms (diff %v)", tn, en, rn, yt, st, st-yt, ts, ts-yt)
-	})
-
 	wheelX := NewWheelX(time.Duration(timerMaxDuration)*timeUnit, WithInterval(time.Duration(interval)*timeUnit))
 	defer wheelX.Stop()
 	go wheelX.Run()
@@ -262,74 +253,104 @@ func TestWheelX(t *testing.T) {
 
 	t.Logf("max steps %v", wheelX.maxStep)
 
-	ticker := time.NewTicker(time.Duration(addTickerDuration) * timeUnit)
-	rmTicker := time.NewTicker(time.Duration(rmTickerDuration) * timeUnit)
-	rmTicker.C = nil
-	timer := time.NewTimer(time.Duration(testDuration) * timeUnit)
-
-	requester := wheelX.NewRequester()
-	for loop {
-		select {
-		case <-ticker.C:
-			if pauseTicker {
-				break
-			}
-			now := time.Now()
-			for i := 0; i < int(n); i++ {
-				r := interval + ran.Int31n(timerMaxDuration-interval)
-				cc := ran.Int31n(2)
-				if cc == 0 {
-					if !requester.Post(time.Duration(r)*timeUnit, fun, []any{r, now}) {
-						t.Fatalf("@@@ Post failed with timeout %v", r)
-						continue
+	var c int = 1
+	var wg sync.WaitGroup
+	wg.Add(c)
+	for i := 0; i < c; i++ {
+		go func(t *testing.T, index int) {
+			var (
+				ran                        = rand.New(rand.NewSource(time.Now().Unix()))
+				n                   uint32 = uint32(interval) * 10
+				ac                         = 0
+				loop                       = true
+				pauseTicker                = false
+				timerReset                 = false
+				minIdCount, idCount uint32
+				en, tn, rn          uint32
+			)
+			var fun = TimerFunc(func(args []any) {
+				en += 1
+				r := args[0].(int32)
+				startTime := args[1].(time.Time)
+				triggerTime := args[2].(time.Time)
+				yt := (time.Duration(r) * timeUnit).Milliseconds()
+				st := time.Since(startTime).Milliseconds()
+				ts := triggerTime.Sub(startTime).Milliseconds()
+				if yt > st {
+					t.Errorf("index(%v)  yt(%v) > st(%v)", index, yt, st)
+				}
+				t.Logf("index(%v)  executed (total count: %v, count: %v, to remove count: %v) timer func with timeout %+v, cost %v ms (diff %v), trigger %v ms (diff %v)", index, tn, en, rn, yt, st, st-yt, ts, ts-yt)
+			})
+			ticker := time.NewTicker(time.Duration(addTickerDuration) * timeUnit)
+			rmTicker := time.NewTicker(time.Duration(rmTickerDuration) * timeUnit)
+			rmTicker.C = nil
+			timer := time.NewTimer(time.Duration(testDuration) * timeUnit)
+			requester := wheelX.NewRequester()
+			for loop {
+				select {
+				case <-ticker.C:
+					if pauseTicker {
+						break
 					}
-					ac += 1
-					//t.Logf("@@@ Post timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
-				} else {
-					id := requester.Add(time.Duration(r)*timeUnit, fun, []any{r, now})
-					if id == 0 {
-						t.Fatalf("@@@ Add failed with timeout %v", r)
-						continue
+					now := time.Now()
+					for i := 0; i < int(n); i++ {
+						r := interval + ran.Int31n(timerMaxDuration-interval)
+						cc := ran.Int31n(2)
+						if cc == 0 {
+							if !requester.Post(time.Duration(r)*timeUnit, fun, []any{r, now}) {
+								t.Errorf("@@@ Post failed with timeout %v", r)
+								continue
+							}
+							ac += 1
+							//t.Logf("@@@ Post timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
+						} else {
+							id := requester.Add(time.Duration(r)*timeUnit, fun, []any{r, now})
+							if id == 0 {
+								t.Errorf("@@@ Add failed with timeout %v", r)
+								continue
+							}
+							ac += 1
+							//t.Logf("@@@ Add timer func with id %v timeout %+v and steps %v, added %v timer", id, time.Duration(r)*timeUnit, r/interval, ac)
+							if minIdCount == 0 || minIdCount > id {
+								minIdCount = id
+							}
+							idCount = id
+						}
 					}
-					ac += 1
-					//t.Logf("@@@ Add timer func with id %v timeout %+v and steps %v, added %v timer", id, time.Duration(r)*timeUnit, r/interval, ac)
-					if minIdCount == 0 || minIdCount > id {
-						minIdCount = id
+					tn += n
+				case <-rmTicker.C:
+					if minIdCount > 0 && idCount-minIdCount >= 10 {
+						id := minIdCount + uint32(ran.Int63n(int64(idCount-minIdCount)))
+						requester.Cancel(id)
+						minIdCount = 0
+						rn += 1
+						t.Logf("@@@ to remove timer %v", id)
 					}
-					idCount = id
+				case <-timer.C:
+					if !timerReset {
+						timer.Reset(time.Duration(resetDuration) * timeUnit)
+						timerReset = true
+						pauseTicker = true
+						t.Logf("index(%v) timer reset, and ticker pause", index)
+					} else {
+						ticker.Stop()
+						loop = false
+					}
+				default:
+					r, o := requester.GetResult()
+					if o {
+						r.ExecuteFunc()
+					} else {
+						time.Sleep(time.Microsecond)
+					}
 				}
 			}
-			tn += n
-		case <-rmTicker.C:
-			if minIdCount > 0 && idCount-minIdCount >= 10 {
-				id := minIdCount + uint32(ran.Int63n(int64(idCount-minIdCount)))
-				requester.Cancel(id)
-				minIdCount = 0
-				rn += 1
-				t.Logf("@@@ to remove timer %v", id)
-			}
-		case <-timer.C:
-			if !timerReset {
-				timer.Reset(time.Duration(resetDuration) * timeUnit)
-				timerReset = true
-				pauseTicker = true
-				t.Logf("timer reset, and ticker pause")
-			} else {
-				ticker.Stop()
-				wheelX.Stop()
-				loop = false
-			}
-		default:
-			r, o := requester.GetResult()
-			if o {
-				r.ExecuteFunc()
-			} else {
-				time.Sleep(time.Microsecond)
-			}
-		}
+			timer.Stop()
+			wg.Done()
+		}(t, i)
 	}
 
-	timer.Stop()
+	wg.Wait()
 
 	for i := 0; i < len(wheelX.layers); i++ {
 		for j := 0; j < len(wheelX.layers[i]); j++ {

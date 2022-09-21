@@ -15,10 +15,15 @@ type resultChanSender struct {
 }
 
 func (s *resultChanSender) Send(index int32, tlist *list.List) {
-	if s.w.senderChanList[index] == nil {
-		s.w.senderChanList[index] = make(chan TimerList, s.w.options.GetSenderListLength())
+	sender := s.w.senderMap[index]
+	if sender == nil {
+		cnt := atomic.AddInt32(&s.w.senderChanListCounter, 1)
+		sender = newSender(s.w, cnt-1)
+		if cnt-1 == 0 {
+			s.w.C = sender.ch
+		}
 	}
-	s.w.senderChanList[index] <- TimerList{l: tlist, m: &s.w.toDelIdMap}
+	sender.ch <- TimerList{l: tlist, m: &s.w.toDelIdMap}
 }
 
 type Wheel struct {
@@ -27,13 +32,13 @@ type Wheel struct {
 	stepTicker            *time.Ticker
 	addCh                 chan *Timer
 	removeCh              chan uint32
-	senderChanList        []chan TimerList
 	senderChanListCounter int32
 	C                     <-chan TimerList
 	closeCh               chan struct{}
 	closeOnce             sync.Once
 	toDelIdMap            sync.Map
 	resultSender          resultChanSender
+	senderMap             map[int32]*Sender
 }
 
 func NewWheel(timerMaxDuration time.Duration, options ...Option) *Wheel {
@@ -50,12 +55,13 @@ func NewWheel(timerMaxDuration time.Duration, options ...Option) *Wheel {
 	w.wheelBase = *newWheelBase(timerMaxDuration, &w.resultSender, &w.options)
 	w.addCh = make(chan *Timer, w.options.GetTimerRecvListLength())
 	w.removeCh = make(chan uint32, w.options.GetRemoveListLength())
-	w.senderChanList = make([]chan TimerList, w.options.GetMaxSenderNum())
-	w.senderChanList[0] = make(chan TimerList, w.options.GetSenderListLength())
-	w.C = w.senderChanList[0]
-	w.senderChanListCounter = 1
+	//w.senderChanList = make([]chan TimerList, w.options.GetMaxSenderNum())
+	//w.senderChanList[0] = make(chan TimerList, w.options.GetSenderListLength())
+	//w.C = w.senderChanList[0]
+	//w.senderChanListCounter = 1
 	w.closeCh = make(chan struct{})
 	w.resultSender = resultChanSender{w: w}
+	w.senderMap = make(map[int32]*Sender)
 	return w
 }
 
@@ -75,10 +81,10 @@ func (w *Wheel) Run() {
 	for atomic.LoadInt32(&w.state) > 0 {
 		select {
 		case <-w.closeCh:
-			for i := 0; i < len(w.senderChanList); i++ {
-				close(w.senderChanList[i])
-			}
-			w.senderChanList = []chan TimerList{nil}
+			//for i := 0; i < len(w.senderChanList); i++ {
+			//	close(w.senderChanList[i])
+			//}
+			//w.senderChanList = []chan TimerList{nil}
 			atomic.StoreInt32(&w.senderChanListCounter, 1)
 			atomic.StoreInt32(&w.state, 0)
 		case v, o := <-w.addCh:
@@ -133,11 +139,6 @@ func (w *Wheel) PostWithDeadline(deadline time.Time, fun TimerFunc, args []any) 
 func (w *Wheel) Cancel(id uint32) {
 	w.toDelIdMap.LoadOrStore(id, true)
 	w.removeCh <- id
-}
-
-func (w *Wheel) ReadTimerList() TimerList {
-	tl := <-w.senderChanList[0]
-	return tl
 }
 
 func (w *Wheel) add(idx int32, id uint32, timeout time.Duration, fun TimerFunc, args []any) {

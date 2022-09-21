@@ -8,13 +8,17 @@ import (
 type Sender struct {
 	wheel *Wheel
 	idx   int32
+	ch    chan TimerList
 }
 
 func newSender(wheel *Wheel, idx int32) *Sender {
-	return &Sender{
+	sender := &Sender{
 		wheel: wheel,
 		idx:   idx,
 	}
+	sender.ch = make(chan TimerList, wheel.options.GetSenderListLength())
+	wheel.senderMap[idx] = sender
+	return sender
 }
 
 func (s *Sender) Add(timeout time.Duration, fun TimerFunc, args []any) uint32 {
@@ -38,15 +42,11 @@ func (s *Sender) Cancel(timerId uint32) {
 	s.wheel.Cancel(timerId)
 }
 
-func (s *Sender) RecvChan() <-chan TimerList {
-	return s.wheel.senderChanList[s.idx]
+func (s *Sender) C() <-chan TimerList {
+	return s.ch
 }
 
 func (w *Wheel) NewSender() *Sender {
 	count := atomic.AddInt32(&w.senderChanListCounter, 1)
-	if count > int32(len(w.senderChanList)) {
-		atomic.AddInt32(&w.senderChanListCounter, -1)
-		return nil
-	}
 	return newSender(w, count-1)
 }
