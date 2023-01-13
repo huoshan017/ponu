@@ -29,17 +29,16 @@ func NewConcurrentListWithLength(maxLength int32) *ConcurrentList {
 	return cl
 }
 
-func (l *ConcurrentList) PushBack(value any) {
-	l.pushBack(value, false)
+func (l *ConcurrentList) PushBack(value any) bool {
+	return l.pushBack(value, false)
 }
 
 func (l *ConcurrentList) PushBackNonBlock(value any) bool {
 	return l.pushBack(value, true)
 }
 
-func (l *ConcurrentList) PopFront() any {
-	val, _ := l.popFront(false)
-	return val
+func (l *ConcurrentList) PopFront() (any, bool) {
+	return l.popFront(false)
 }
 
 func (l *ConcurrentList) PopFrontNonBlock() (any, bool) {

@@ -4,6 +4,11 @@ import (
 	"sync"
 )
 
+type node struct {
+	value      any
+	prev, next *node
+}
+
 var (
 	nullNode = node{}
 	nodePool *sync.Pool
@@ -26,11 +31,6 @@ func putNode(n *node) {
 	n.next = nil
 	n.value = nil
 	nodePool.Put(n)
-}
-
-type node struct {
-	value      any
-	prev, next *node
 }
 
 type Iterator struct {
