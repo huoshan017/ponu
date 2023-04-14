@@ -60,24 +60,18 @@ func heap_adjust_max(arr []Elem, s, m int) {
 		m = len(arr) - 1
 	}
 
-	var max int
-	for {
-		left := 2*s + 1
-		if left > m {
+	var dad = s
+	var son = dad*2 + 1
+	for son <= m {
+		if son+1 <= m && arr[son].Less(arr[son+1]) {
+			son += 1
+		}
+		if arr[son].Less(arr[dad]) {
 			break
 		}
-		right := 2*s + 2
-		max = left
-		if right <= m {
-			if arr[left].Less(arr[right]) {
-				max = right
-			}
-		}
-		if !arr[s].Less(arr[max]) {
-			break
-		}
-		arr[s], arr[max] = arr[max], arr[s]
-		s = max
+		arr[dad], arr[son] = arr[son], arr[dad]
+		dad = son
+		son = dad*2 + 1
 	}
 }
 

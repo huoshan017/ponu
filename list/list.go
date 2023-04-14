@@ -56,15 +56,19 @@ func (iter *Iterator) Prev() Iterator {
 }
 
 func (iter *Iterator) IsValid() bool {
-	return iter.n != nil
+	return iter.n != nil && iter.n != &nullNode
 }
 
-func (iter *Iterator) IsBegin(l *List) bool {
+func (iter *Iterator) IsHead(l *List) bool {
 	return iter.n == l.head
 }
 
-func (iter *Iterator) IsEnd(l *List) bool {
+func (iter *Iterator) IsTail(l *List) bool {
 	return iter.n == l.tail
+}
+
+func (iter *Iterator) IsEqualTo(i Iterator) bool {
+	return *(iter.n) == *(i.n)
 }
 
 type List struct {
@@ -86,6 +90,19 @@ func (l List) GetLength() int32 {
 
 func (l List) IsEmpty() bool {
 	return l.length == 0
+}
+
+func (l *List) PushFront(val any) {
+	n := getNode()
+	n.value = val
+	n.next = l.head
+	if l.head == nil {
+		l.tail = n
+	} else {
+		l.head.prev = n
+	}
+	l.head = n
+	l.length += 1
 }
 
 func (l *List) PushBack(val any) {
@@ -119,6 +136,23 @@ func (l *List) PopFront() (any, bool) {
 	return value, true
 }
 
+func (l *List) PopBack() (any, bool) {
+	if l.length == 0 {
+		return nil, false
+	}
+	n := l.tail
+	l.tail = l.tail.prev
+	if l.tail != nil {
+		l.tail.next = nil
+	} else {
+		l.head = nil
+	}
+	l.length -= 1
+	value := n.value
+	putNode(n)
+	return value, true
+}
+
 func (l *List) InsertContinue(val any, after Iterator) Iterator {
 	var iter Iterator
 	n := l.insert(val, after)
@@ -128,6 +162,22 @@ func (l *List) InsertContinue(val any, after Iterator) Iterator {
 
 func (l *List) Insert(val any, after Iterator) {
 	l.insert(val, after)
+}
+
+func (l *List) InsertBeforeContinue(val any, before Iterator) Iterator {
+	var iter Iterator
+	n := l.insertBefore(val, before)
+	iter.n = n
+	return iter
+}
+
+func (l *List) InsertBefore(val any, before Iterator) {
+	l.insertBefore(val, before)
+}
+
+func (l *List) insertBefore(val any, before Iterator) *node {
+	after := before.Prev()
+	return l.insert(val, after)
 }
 
 func (l *List) insert(val any, after Iterator) *node {
@@ -154,6 +204,14 @@ func (l *List) insert(val any, after Iterator) *node {
 	}
 	l.length += 1
 	return n
+}
+
+func (l *List) Update(val any, iter Iterator) bool {
+	if iter.n == nil || iter.n == &nullNode {
+		return false
+	}
+	iter.n.value = val
+	return true
 }
 
 func (l *List) DeleteContinueNext(iter Iterator) (Iterator, bool) {
@@ -254,4 +312,14 @@ func (l *List) RBegin() Iterator {
 
 func (l *List) REnd() Iterator {
 	return Iterator{n: &nullNode}
+}
+
+func (l *List) Duplicate() List {
+	nl := NewObj()
+	n := l.Begin()
+	for n != l.End() {
+		nl.PushBack(n.Value())
+		n = n.Next()
+	}
+	return nl
 }
