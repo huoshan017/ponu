@@ -59,6 +59,14 @@ func (lru *LRU[K, V]) Get(key K) (V, bool) {
 	return iter.Value().(pair[K, V]).v, true
 }
 
+func (lru *LRU[K, V]) Has(key K) bool {
+	if lru.m == nil {
+		return false
+	}
+	_, o := lru.m[key]
+	return o
+}
+
 func (lru *LRU[K, V]) Delete(key K) bool {
 	if lru.m == nil {
 		return false

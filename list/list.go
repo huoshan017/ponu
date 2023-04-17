@@ -323,3 +323,19 @@ func (l *List) Duplicate() List {
 	}
 	return nl
 }
+
+func (l *List) CopyTo(li *List) {
+	n := l.Begin()
+	for n != li.End() {
+		li.PushBack(n.Value())
+		n = n.Next()
+	}
+}
+
+func (l *List) Merge(li List) {
+	n := li.Begin()
+	for n != li.End() {
+		l.PushBack(n.Value())
+		n = n.Next()
+	}
+}
