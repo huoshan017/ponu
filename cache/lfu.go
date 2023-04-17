@@ -55,14 +55,24 @@ func (lfu *lfuShard[K, V]) Set(key K, value V) {
 			}
 			lfu.add(key, value)
 		} else {
-			if lfu.cap <= atomic.LoadInt32(lfu.totalSize) {
-				lfu.deleteFirst()
+			if lfu.cap <= atomic.LoadInt32(lfu.totalSize) { // 原子操作判斷大小已達最大容量
+				// 刪除掉一個最不常訪問的，再添加一個，保持總數量不變
+				if !lfu.deleteFirst() { // 刪除失敗(幾乎不可能，不過爲了嚴謹還是判斷一下)表示鏈表已空，總數量加一
+					atomic.AddInt32(lfu.totalSize, 1)
+				}
 				lfu.add(key, value)
 			} else {
+				// 因爲之前已經通過原子操作判斷大小totalSize沒到最大容量cap
+				// 所以原子操作加一后得到當前大小，這時有兩種結果：
+				// 1. 大於容量cap，表示這中間有其他goroutine添加了元素，則把當前大小減一(盡可能快，
+				//	  因爲會影響到其他goroutine)，操作同上面的if判斷，保持總數量不變
+				// 2. 小於等於cap，則直接添加元素
 				if lfu.cap < atomic.AddInt32(lfu.totalSize, 1) {
-					lfu.deleteFirst()
-					lfu.add(key, value)
 					atomic.AddInt32(lfu.totalSize, -1)
+					if !lfu.deleteFirst() {
+						atomic.AddInt32(lfu.totalSize, 1)
+					}
+					lfu.add(key, value)
 				} else {
 					lfu.add(key, value)
 				}
@@ -197,7 +207,10 @@ func (lfu *lfuShard[K, V]) updateFrequency(iter list.Iterator, f int32) {
 	}
 }
 
-func (lfu *lfuShard[K, V]) deleteFirst() {
+func (lfu *lfuShard[K, V]) deleteFirst() bool {
+	if lfu.l.GetLength() <= 0 {
+		return false
+	}
 	iter := lfu.l.Begin()
 	val := lfu.l.Front()
 	n := val.(node[K, V])
@@ -207,6 +220,7 @@ func (lfu *lfuShard[K, V]) deleteFirst() {
 	}
 	delete(lfu.k2i, n.k)
 	lfu.l.PopFront()
+	return true
 }
 
 func (lfu *lfuShard[K, V]) add(key K, value V) {
