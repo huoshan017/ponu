@@ -82,3 +82,9 @@ func TestConcurrentLFU(t *testing.T) {
 
 	l.Clear()
 }
+
+func TestConcurrentLFUWithString(t *testing.T) {
+	var l = NewConcurrentLFU[string, int32](100)
+	l.Set("aaa", 1)
+	l.Set("bbb", 2)
+}

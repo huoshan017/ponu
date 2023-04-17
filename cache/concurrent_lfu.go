@@ -145,9 +145,9 @@ func (lfu *ConcurrentLFU[K, V]) getHashIndex(key K) int32 {
 	case reflect.Int32:
 	case reflect.Int64:
 		if lfuIntHashFunc == nil {
-			index = defaultLfuIntHashFunc(v.Elem().Int(), shardSize)
+			index = defaultLfuIntHashFunc(v.Int(), shardSize)
 		} else {
-			index = lfuIntHashFunc(v.Elem().Int(), shardSize)
+			index = lfuIntHashFunc(v.Int(), shardSize)
 		}
 	case reflect.Uint:
 	case reflect.Uint8:
@@ -156,15 +156,15 @@ func (lfu *ConcurrentLFU[K, V]) getHashIndex(key K) int32 {
 	case reflect.Uint64:
 	case reflect.Uintptr:
 		if lfuUintHashFunc == nil {
-			index = defaultLfuUintHashFunc(v.Elem().Uint(), shardSize)
+			index = defaultLfuUintHashFunc(v.Uint(), shardSize)
 		} else {
-			index = lfuUintHashFunc(v.Elem().Uint(), shardSize)
+			index = lfuUintHashFunc(v.Uint(), shardSize)
 		}
 	case reflect.String:
 		if lfuStringHashFunc == nil {
-			index = defaultLfuStringHashFunc(v.Elem().String(), shardSize)
+			index = defaultLfuStringHashFunc(v.String(), shardSize)
 		} else {
-			index = lfuStringHashFunc(v.Elem().String(), shardSize)
+			index = lfuStringHashFunc(v.String(), shardSize)
 		}
 	default:
 		panic("cache ponu: unsupported key type")
