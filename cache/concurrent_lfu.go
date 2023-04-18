@@ -2,7 +2,6 @@ package cache
 
 import (
 	"reflect"
-	"sync"
 
 	"github.com/huoshan017/ponu/list"
 )
@@ -11,61 +10,10 @@ const (
 	shardSize = 64
 )
 
-type keyType interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr | ~string
-}
-
-type lfuShardWithLock[K keyType, V any] struct {
-	*lfuShard[K, V]
-	rwlock sync.RWMutex
-}
-
-func newLFUShardWithLock[K keyType, V any](cap int32, totalSize *int32) *lfuShardWithLock[K, V] {
-	return &lfuShardWithLock[K, V]{
-		lfuShard: newLFUShardWithTotalSize[K, V](cap, totalSize),
-	}
-}
-
-func (shard *lfuShardWithLock[K, V]) Set(key K, value V) {
-	shard.rwlock.Lock()
-	defer shard.rwlock.Unlock()
-	shard.lfuShard.Set(key, value)
-}
-
-func (shard *lfuShardWithLock[K, V]) Get(key K) (V, bool) {
-	shard.rwlock.Lock()
-	defer shard.rwlock.Unlock()
-	return shard.lfuShard.Get(key)
-}
-
-func (shard *lfuShardWithLock[K, V]) Has(key K) bool {
-	shard.rwlock.RLock()
-	defer shard.rwlock.RUnlock()
-	return shard.lfuShard.Has(key)
-}
-
-func (shard *lfuShardWithLock[K, V]) Delete(key K) bool {
-	shard.rwlock.Lock()
-	defer shard.rwlock.Unlock()
-	return shard.lfuShard.Delete(key)
-}
-
-func (shard *lfuShardWithLock[K, V]) ToList() list.List {
-	shard.rwlock.RLock()
-	defer shard.rwlock.RUnlock()
-	return shard.lfuShard.ToList()
-}
-
-func (shard *lfuShardWithLock[K, V]) Clear() {
-	shard.rwlock.Lock()
-	defer shard.rwlock.Unlock()
-	shard.lfuShard.Clear()
-}
-
 type ConcurrentLFU[K keyType, V any] struct {
 	typ      reflect.Type
 	currSize int32
-	shards   []*lfuShardWithLock[K, V]
+	shards   []*LFUWithLock[K, V]
 }
 
 func NewConcurrentLFU[K keyType, V any](cap int32) *ConcurrentLFU[K, V] {
@@ -89,10 +37,10 @@ func NewConcurrentLFU[K keyType, V any](cap int32) *ConcurrentLFU[K, V] {
 	}
 	lfu := &ConcurrentLFU[K, V]{
 		typ:    t,
-		shards: make([]*lfuShardWithLock[K, V], shardSize),
+		shards: make([]*LFUWithLock[K, V], shardSize),
 	}
 	for i := 0; i < len(lfu.shards); i++ {
-		lfu.shards[i] = newLFUShardWithLock[K, V](cap, &lfu.currSize)
+		lfu.shards[i] = newLFUWithLockAndTotalSize[K, V](cap, &lfu.currSize)
 	}
 	return lfu
 }

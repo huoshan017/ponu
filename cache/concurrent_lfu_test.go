@@ -21,7 +21,7 @@ func TestConcurrentLFU(t *testing.T) {
 	var wg sync.WaitGroup
 
 	wg.Add(20)
-	for g := 0; g < 20; g++ {
+	for g := 0; g < 500; g++ {
 		go func() {
 			var (
 				n, k, v int32

@@ -2,10 +2,15 @@ package cache
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/huoshan017/ponu/list"
 )
+
+type keyType interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr | ~string
+}
 
 type node[K keyType, V any] struct {
 	k K
@@ -13,7 +18,7 @@ type node[K keyType, V any] struct {
 	f int32
 }
 
-type lfuShard[K keyType, V any] struct {
+type lfuBase[K keyType, V any] struct {
 	cap       int32
 	totalSize *int32
 	l         list.List
@@ -21,8 +26,8 @@ type lfuShard[K keyType, V any] struct {
 	f2i       map[int32]list.Iterator // 保存訪問次數對應的迭代器，這個迭代器是該訪問次數下最新的，如果有更新的迭代器，則插在它之後
 }
 
-func newLFUShard[K keyType, V any](cap int32) *lfuShard[K, V] {
-	return &lfuShard[K, V]{
+func newLFUBase[K keyType, V any](cap int32) *lfuBase[K, V] {
+	return &lfuBase[K, V]{
 		cap: cap,
 		l:   list.NewObj(),
 		k2i: make(map[K]list.Iterator),
@@ -30,8 +35,8 @@ func newLFUShard[K keyType, V any](cap int32) *lfuShard[K, V] {
 	}
 }
 
-func newLFUShardWithTotalSize[K keyType, V any](cap int32, totalSize *int32) *lfuShard[K, V] {
-	return &lfuShard[K, V]{
+func newLFUBaseWithTotalSize[K keyType, V any](cap int32, totalSize *int32) *lfuBase[K, V] {
+	return &lfuBase[K, V]{
 		cap:       cap,
 		totalSize: totalSize,
 		l:         list.NewObj(),
@@ -40,7 +45,7 @@ func newLFUShardWithTotalSize[K keyType, V any](cap int32, totalSize *int32) *lf
 	}
 }
 
-func (lfu *lfuShard[K, V]) Set(key K, value V) {
+func (lfu *lfuBase[K, V]) Set(key K, value V) {
 	if lfu.k2i == nil {
 		lfu.k2i = make(map[K]list.Iterator)
 	}
@@ -57,20 +62,21 @@ func (lfu *lfuShard[K, V]) Set(key K, value V) {
 		} else {
 			if lfu.cap <= atomic.LoadInt32(lfu.totalSize) { // 原子操作判斷大小已達最大容量
 				// 刪除掉一個最不常訪問的，再添加一個，保持總數量不變
-				if !lfu.deleteFirst() { // 刪除失敗(幾乎不可能，不過爲了嚴謹還是判斷一下)表示鏈表已空，總數量加一
+				// 如果刪除失敗，表示鏈表已空，總數量加一。
+				// 對於一個Shard來説，同一時間保證只有一個goroutine對其Set操作
+				if !lfu.deleteFirst() {
 					atomic.AddInt32(lfu.totalSize, 1)
 				}
 				lfu.add(key, value)
 			} else {
-				// 因爲之前已經通過原子操作判斷大小totalSize沒到最大容量cap
-				// 所以原子操作加一后得到當前大小，這時有兩種結果：
+				// 前面通過原子操作知道totalSize沒到最大容量cap
+				// 再進行原子操作加一后得到當前大小，這時有兩種結果：
 				// 1. 大於容量cap，表示這中間有其他goroutine添加了元素，則把當前大小減一(盡可能快，
-				//	  因爲會影響到其他goroutine)，操作同上面的if判斷，保持總數量不變
+				//	  因爲會影響到其他goroutine)，刪掉一個再添加一個，保持總數量不變
 				// 2. 小於等於cap，則直接添加元素
 				if lfu.cap < atomic.AddInt32(lfu.totalSize, 1) {
-					atomic.AddInt32(lfu.totalSize, -1)
-					if !lfu.deleteFirst() {
-						atomic.AddInt32(lfu.totalSize, 1)
+					if lfu.deleteFirst() {
+						atomic.AddInt32(lfu.totalSize, -1)
 					}
 					lfu.add(key, value)
 				} else {
@@ -83,7 +89,7 @@ func (lfu *lfuShard[K, V]) Set(key K, value V) {
 	}
 }
 
-func (lfu *lfuShard[K, V]) Get(key K) (V, bool) {
+func (lfu *lfuBase[K, V]) Get(key K) (V, bool) {
 	var (
 		iter list.Iterator
 		v    V
@@ -102,7 +108,7 @@ func (lfu *lfuShard[K, V]) Get(key K) (V, bool) {
 	return v, true
 }
 
-func (lfu *lfuShard[K, V]) Delete(key K) bool {
+func (lfu *lfuBase[K, V]) Delete(key K) bool {
 	var (
 		iter list.Iterator
 		o    bool
@@ -117,32 +123,37 @@ func (lfu *lfuShard[K, V]) Delete(key K) bool {
 	}
 	delete(lfu.k2i, key)
 	lfu.l.Delete(iter)
-	atomic.AddInt32(lfu.totalSize, -1)
+	if lfu.totalSize != nil {
+		atomic.AddInt32(lfu.totalSize, -1)
+	}
 	return true
 }
 
-func (lfu *lfuShard[K, V]) Has(key K) bool {
+func (lfu *lfuBase[K, V]) Has(key K) bool {
 	_, o := lfu.k2i[key]
 	return o
 }
 
-func (lfu *lfuShard[K, V]) ToList() list.List {
+func (lfu *lfuBase[K, V]) ToList() list.List {
 	l := lfu.l.Duplicate()
 	return l
 }
 
-func (lfu *lfuShard[K, V]) Clear() {
+func (lfu *lfuBase[K, V]) Clear() {
 	lfu.l.Clear()
 	lfu.k2i = nil
 	lfu.f2i = nil
+	if lfu.totalSize != nil {
+		atomic.AddInt32(lfu.totalSize, -lfu.l.GetLength())
+	}
 }
 
-func (lfu *lfuShard[K, V]) update(iter list.Iterator) {
+func (lfu *lfuBase[K, V]) update(iter list.Iterator) {
 	var v V
 	lfu.updateValue(iter, false, v)
 }
 
-func (lfu *lfuShard[K, V]) updateValue(iter list.Iterator, update bool, val V) {
+func (lfu *lfuBase[K, V]) updateValue(iter list.Iterator, update bool, val V) {
 	var (
 		n             node[K, V]
 		f             int32
@@ -195,7 +206,7 @@ func (lfu *lfuShard[K, V]) updateValue(iter list.Iterator, update bool, val V) {
 	lfu.f2i[n.f] = iter
 }
 
-func (lfu *lfuShard[K, V]) updateFrequency(iter list.Iterator, f int32) {
+func (lfu *lfuBase[K, V]) updateFrequency(iter list.Iterator, f int32) {
 	prev := iter.Prev()
 	if !prev.IsValid() || f != prev.Value().(node[K, V]).f {
 		// 前一個元素不存在 或者
@@ -207,7 +218,7 @@ func (lfu *lfuShard[K, V]) updateFrequency(iter list.Iterator, f int32) {
 	}
 }
 
-func (lfu *lfuShard[K, V]) deleteFirst() bool {
+func (lfu *lfuBase[K, V]) deleteFirst() bool {
 	if lfu.l.GetLength() <= 0 {
 		return false
 	}
@@ -223,7 +234,7 @@ func (lfu *lfuShard[K, V]) deleteFirst() bool {
 	return true
 }
 
-func (lfu *lfuShard[K, V]) add(key K, value V) {
+func (lfu *lfuBase[K, V]) add(key K, value V) {
 	var iter list.Iterator
 	niter, o := lfu.f2i[1]
 	if !o { // 沒有訪問次數為1對應的迭代器，則新插入的元素肯定為訪問頻次最低的元素，放在鏈表頭
@@ -237,11 +248,64 @@ func (lfu *lfuShard[K, V]) add(key K, value V) {
 }
 
 type LFU[K keyType, V any] struct {
-	lfuShard[K, V]
+	lfuBase[K, V]
 }
 
 func NewLFU[K keyType, V any](cap int32) *LFU[K, V] {
 	return &LFU[K, V]{
-		*newLFUShard[K, V](cap),
+		*newLFUBase[K, V](cap),
 	}
+}
+
+type LFUWithLock[K keyType, V any] struct {
+	*lfuBase[K, V]
+	rwlock sync.RWMutex
+}
+
+func NewLFUWithLock[K keyType, V any](cap int32) *LFUWithLock[K, V] {
+	return &LFUWithLock[K, V]{
+		lfuBase: newLFUBase[K, V](cap),
+	}
+}
+
+func newLFUWithLockAndTotalSize[K keyType, V any](cap int32, totalSize *int32) *LFUWithLock[K, V] {
+	return &LFUWithLock[K, V]{
+		lfuBase: newLFUBaseWithTotalSize[K, V](cap, totalSize),
+	}
+}
+
+func (lfu *LFUWithLock[K, V]) Set(key K, value V) {
+	lfu.rwlock.Lock()
+	defer lfu.rwlock.Unlock()
+	lfu.lfuBase.Set(key, value)
+}
+
+func (lfu *LFUWithLock[K, V]) Get(key K) (V, bool) {
+	lfu.rwlock.Lock()
+	defer lfu.rwlock.Unlock()
+	return lfu.lfuBase.Get(key)
+}
+
+func (lfu *LFUWithLock[K, V]) Has(key K) bool {
+	lfu.rwlock.RLock()
+	defer lfu.rwlock.RUnlock()
+	return lfu.lfuBase.Has(key)
+}
+
+func (lfu *LFUWithLock[K, V]) Delete(key K) bool {
+	lfu.rwlock.Lock()
+	defer lfu.rwlock.Unlock()
+	return lfu.lfuBase.Delete(key)
+}
+
+func (lfu *LFUWithLock[K, V]) ToList() list.List {
+	lfu.rwlock.RLock()
+	defer lfu.rwlock.RUnlock()
+	return lfu.lfuBase.ToList()
+}
+
+func (lfu *LFUWithLock[K, V]) Clear() {
+	lfu.rwlock.Lock()
+	defer lfu.rwlock.Unlock()
+	lfu.lfuBase.Clear()
 }
