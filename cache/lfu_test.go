@@ -21,7 +21,6 @@ func TestLFU(t *testing.T) {
 		r             = rand.New(s)
 		n, k, v int32
 		iter    list.Iterator
-		//str     string
 	)
 
 	for n = 0; n < loopNum; n++ {
@@ -54,31 +53,13 @@ func TestLFU(t *testing.T) {
 
 	dl := l.ToList()
 
-	//for k, v := range l.k2i {
-	//	str += fmt.Sprintf("  key: %+v, iterator: %+v", k, v.Value().(node[int32, int32]))
-	//}
-	//t.Logf("k2i(len:%v) values: %v", len(l.k2i), str)
-
-	//iter := l.l.Begin()
-	//for iter != l.l.End() {
-	//str += fmt.Sprintf(" %v", iter.Value())
-	//iter = iter.Next()
-	//}
-	//t.Logf("original list(len: %v) value is: %v", l.l.GetLength(), str)
-
-	//str = ""
 	iter = dl.Begin()
 	for iter != dl.End() {
-		//str += fmt.Sprintf(" %v", iter.Value())
 		delete(l.k2i, iter.Value().(node[int32, int32]).k)
 		iter = iter.Next()
 	}
-	//t.Logf("duplicate list(len: %v) value is: %v", dl.GetLength(), str)
 
 	t.Logf("k2i(diff len to list: %v):", len(l.k2i))
-	//for k, v := range l.k2i {
-	//	t.Logf("	key: %+v, iterator: %+v", k, v.Value().(node[int32, int32]))
-	//}
 
 	t.Logf("f2i(len:%v):", len(l.f2i))
 	for k, v := range l.f2i {
@@ -98,8 +79,8 @@ func TestLFUWithLock(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(20)
-	for g := 0; g < 20; g++ {
+	wg.Add(50)
+	for g := 0; g < 50; g++ {
 		go func() {
 			var (
 				n, k, v int32
@@ -125,7 +106,7 @@ func TestLFUWithLock(t *testing.T) {
 		go func() {
 			s := rand.NewSource(time.Now().Unix())
 			r := rand.New(s)
-			for n := 0; n < 1000; n++ {
+			for n := int32(0); n < loopNum; n++ {
 				k := r.Int31n(maxKey) + 1
 				l.Get(k)
 			}
@@ -137,7 +118,7 @@ func TestLFUWithLock(t *testing.T) {
 	go func() {
 		s := rand.NewSource(time.Now().Unix())
 		r := rand.New(s)
-		for n := 0; n < 10; n++ {
+		for n := int32(0); n < loopNum; n++ {
 			k := r.Int31n(maxKey) + 1
 			l.Delete(k)
 		}

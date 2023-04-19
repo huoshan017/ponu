@@ -8,17 +8,13 @@ import (
 	"github.com/huoshan017/ponu/list"
 )
 
-type keyType interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr | ~string
-}
-
-type node[K keyType, V any] struct {
+type node[K comparable, V any] struct {
 	k K
 	v V
 	f int32
 }
 
-type lfuBase[K keyType, V any] struct {
+type lfuBase[K comparable, V any] struct {
 	cap       int32
 	totalSize *int32
 	l         list.List
@@ -26,7 +22,7 @@ type lfuBase[K keyType, V any] struct {
 	f2i       map[int32]list.Iterator // 保存訪問次數對應的迭代器，這個迭代器是該訪問次數下最新的，如果有更新的迭代器，則插在它之後
 }
 
-func newLFUBase[K keyType, V any](cap int32) *lfuBase[K, V] {
+func newLFUBase[K comparable, V any](cap int32) *lfuBase[K, V] {
 	return &lfuBase[K, V]{
 		cap: cap,
 		l:   list.NewObj(),
@@ -35,7 +31,7 @@ func newLFUBase[K keyType, V any](cap int32) *lfuBase[K, V] {
 	}
 }
 
-func newLFUBaseWithTotalSize[K keyType, V any](cap int32, totalSize *int32) *lfuBase[K, V] {
+func newLFUBaseWithTotalSize[K comparable, V any](cap int32, totalSize *int32) *lfuBase[K, V] {
 	return &lfuBase[K, V]{
 		cap:       cap,
 		totalSize: totalSize,
@@ -247,28 +243,28 @@ func (lfu *lfuBase[K, V]) add(key K, value V) {
 	lfu.k2i[key] = iter
 }
 
-type LFU[K keyType, V any] struct {
+type LFU[K comparable, V any] struct {
 	lfuBase[K, V]
 }
 
-func NewLFU[K keyType, V any](cap int32) *LFU[K, V] {
+func NewLFU[K comparable, V any](cap int32) *LFU[K, V] {
 	return &LFU[K, V]{
 		*newLFUBase[K, V](cap),
 	}
 }
 
-type LFUWithLock[K keyType, V any] struct {
+type LFUWithLock[K comparable, V any] struct {
 	*lfuBase[K, V]
 	rwlock sync.RWMutex
 }
 
-func NewLFUWithLock[K keyType, V any](cap int32) *LFUWithLock[K, V] {
+func NewLFUWithLock[K comparable, V any](cap int32) *LFUWithLock[K, V] {
 	return &LFUWithLock[K, V]{
 		lfuBase: newLFUBase[K, V](cap),
 	}
 }
 
-func newLFUWithLockAndTotalSize[K keyType, V any](cap int32, totalSize *int32) *LFUWithLock[K, V] {
+func newLFUWithLockAndTotalSize[K comparable, V any](cap int32, totalSize *int32) *LFUWithLock[K, V] {
 	return &LFUWithLock[K, V]{
 		lfuBase: newLFUBaseWithTotalSize[K, V](cap, totalSize),
 	}
