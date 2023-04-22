@@ -31,12 +31,6 @@ func newRequester(w *WheelX, idx int32) *Requester {
 }
 
 func (r *Requester) Add(timeout time.Duration, fun TimerFunc, args []any) uint32 {
-	/*if timeout < r.wheel.options.GetInterval() || timeout > r.wheel.maxDuration {
-		return 0
-	}
-	newId := atomic.AddUint32(&r.wheel.currId, 1)
-	r.wheel.request0(r.index, newId, timeout, fun, args)
-	return newId*/
 	return r.wheel.add(r.index, timeout, fun, args)
 }
 
@@ -45,11 +39,6 @@ func (r *Requester) AddWithDeadline(deadline time.Time, fun TimerFunc, args []an
 }
 
 func (r *Requester) Post(timeout time.Duration, fun TimerFunc, args []any) bool {
-	/*if timeout < r.wheel.options.GetInterval() || timeout > r.wheel.maxDuration {
-		return false
-	}
-	r.wheel.request0(r.index, 0, timeout, fun, args)
-	return true*/
 	return r.wheel.post(r.index, timeout, fun, args)
 }
 
@@ -91,7 +80,7 @@ func (s *resultQueueSender) Send(index int32, tlist *list.List) {
 type WheelX struct {
 	*wheelBase
 	options          Options
-	reqList          *lockfree.Queue //*list.ConcurrentList
+	reqList          *list.ConcurrentList
 	requesterCounter int32
 	resultSender     IResultSender
 	state            int32
@@ -112,7 +101,7 @@ func NewWheelX(timerMaxDuration time.Duration, options ...Option) *WheelX {
 	w.options = ops
 	w.resultSender = &resultQueueSender{w: w}
 	w.wheelBase = newWheelBase(timerMaxDuration, w.resultSender, &w.options)
-	w.reqList = lockfree.NewQueue() //list.NewConcurrentListWithLength(w.options.GetTimerRecvListLength())
+	w.reqList = list.NewConcurrentList()
 	w.requesterMap = make(map[int32]*Requester)
 	return w
 }
@@ -134,11 +123,10 @@ func (w *WheelX) Run() {
 
 	w.start()
 
+	var req any
 	atomic.StoreInt32(&w.state, 1)
 	for atomic.LoadInt32(&w.state) > 0 {
-		//req, o := w.reqList.PopFrontNonBlock()
-		//if o {
-		req := w.reqList.Dequeue()
+		req, _ = w.reqList.PopFront()
 		if req != nil {
 			d := req.(struct {
 				typ  int32
@@ -151,11 +139,7 @@ func (w *WheelX) Run() {
 			} else {
 				log.Printf("ponu.time.WheelX unknown request type %v", d.typ)
 			}
-		}
-		w.handleTick()
-		//if !o {
-		if req == nil {
-			time.Sleep(time.Microsecond * 1)
+			w.handleTick()
 		}
 	}
 }
@@ -193,7 +177,7 @@ func (w *WheelX) postWithDeadline(index int32, deadline time.Time, fun TimerFunc
 
 func (w *WheelX) cancel(id uint32) {
 	w.toDelIdMap.LoadOrStore(id, true)
-	w.reqList.Enqueue /*PushBack*/ (struct {
+	w.reqList.PushBack(struct {
 		typ  int32
 		data any
 	}{reqCancel, id})
@@ -207,7 +191,7 @@ func (w *WheelX) request(idx int32, id uint32, timeout time.Duration, fun TimerF
 	t.fun = fun
 	t.arg = args
 	t.expireTime = time.Now().Add(timeout)
-	w.reqList.Enqueue /*PushBack*/ (struct {
+	w.reqList.PushBack(struct {
 		typ  int32
 		data any
 	}{typ: reqAdd, data: t})

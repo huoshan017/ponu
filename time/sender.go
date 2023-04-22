@@ -3,21 +3,23 @@ package time
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/huoshan017/ponu/lockfree"
 )
 
 type Sender struct {
 	wheel *Wheel
 	idx   int32
-	ch    chan TimerList
+	tlist *lockfree.QueueT[TimerList]
 }
 
 func newSender(wheel *Wheel, idx int32) *Sender {
 	sender := &Sender{
 		wheel: wheel,
 		idx:   idx,
+		tlist: lockfree.NewQueueT[TimerList](),
 	}
-	sender.ch = make(chan TimerList, wheel.options.GetSenderListLength())
-	wheel.senderMap[idx] = sender
+	wheel.resultSenderCh <- sender
 	return sender
 }
 
@@ -42,8 +44,8 @@ func (s *Sender) Cancel(timerId uint32) {
 	s.wheel.Cancel(timerId)
 }
 
-func (s *Sender) C() <-chan TimerList {
-	return s.ch
+func (s *Sender) GetTimerList() (TimerList, bool) {
+	return s.tlist.Dequeue()
 }
 
 func (w *Wheel) NewSender() *Sender {

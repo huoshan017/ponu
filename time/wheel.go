@@ -17,13 +17,13 @@ type resultChanSender struct {
 func (s *resultChanSender) Send(index int32, tlist *list.List) {
 	sender := s.w.senderMap[index]
 	if sender == nil {
-		cnt := atomic.AddInt32(&s.w.senderChanListCounter, 1)
-		sender = newSender(s.w, cnt-1)
-		if cnt-1 == 0 {
-			s.w.C = sender.ch
+		// 等待通道傳過來
+		for sender == nil || sender.idx != index {
+			sender = <-s.w.resultSenderCh
+			s.w.senderMap[sender.idx] = sender
 		}
 	}
-	sender.ch <- TimerList{l: tlist, m: &s.w.toDelIdMap}
+	sender.tlist.Enqueue(TimerList{l: tlist, m: &s.w.toDelIdMap})
 }
 
 type Wheel struct {
@@ -32,6 +32,7 @@ type Wheel struct {
 	stepTicker            *time.Ticker
 	addCh                 chan *Timer
 	removeCh              chan uint32
+	resultSenderCh        chan *Sender
 	senderChanListCounter int32
 	C                     <-chan TimerList
 	closeCh               chan struct{}
@@ -55,10 +56,7 @@ func NewWheel(timerMaxDuration time.Duration, options ...Option) *Wheel {
 	w.wheelBase = *newWheelBase(timerMaxDuration, &w.resultSender, &w.options)
 	w.addCh = make(chan *Timer, w.options.GetTimerRecvListLength())
 	w.removeCh = make(chan uint32, w.options.GetRemoveListLength())
-	//w.senderChanList = make([]chan TimerList, w.options.GetMaxSenderNum())
-	//w.senderChanList[0] = make(chan TimerList, w.options.GetSenderListLength())
-	//w.C = w.senderChanList[0]
-	//w.senderChanListCounter = 1
+	w.resultSenderCh = make(chan *Sender)
 	w.closeCh = make(chan struct{})
 	w.resultSender = resultChanSender{w: w}
 	w.senderMap = make(map[int32]*Sender)
@@ -77,16 +75,12 @@ func (w *Wheel) Run() {
 	<-w.stepTicker.C
 	w.start()
 
-	atomic.StoreInt32(&w.state, 1)
-	for atomic.LoadInt32(&w.state) > 0 {
+	var loop bool = true
+	for loop {
 		select {
 		case <-w.closeCh:
-			//for i := 0; i < len(w.senderChanList); i++ {
-			//	close(w.senderChanList[i])
-			//}
-			//w.senderChanList = []chan TimerList{nil}
 			atomic.StoreInt32(&w.senderChanListCounter, 1)
-			atomic.StoreInt32(&w.state, 0)
+			loop = false
 		case v, o := <-w.addCh:
 			if o {
 				w.addTimeout(v)
@@ -94,6 +88,16 @@ func (w *Wheel) Run() {
 		case id, o := <-w.removeCh:
 			if o {
 				w.remove(id)
+			}
+		case sender, o := <-w.resultSenderCh:
+			if o {
+				if w.senderMap[sender.idx] == nil {
+					w.senderMap[sender.idx] = sender
+					//if sender.idx == 0 {
+					// w.C表示第一個創建的send通道
+					//w.C = sender.ch
+					//}
+				}
 			}
 		case <-w.stepTicker.C:
 			w.handleTick()

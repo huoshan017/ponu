@@ -5,10 +5,10 @@ import "time"
 const (
 	defaultInterval            = 33 * time.Millisecond
 	minInterval                = 5 * time.Millisecond
-	defaultTimerRecvListLength = 2048
-	defaultRemoveListLength    = 512
+	defaultTimerRecvListLength = 128
+	defaultRemoveListLength    = 32
 	defaultSendNum             = 1
-	defaultSenderListLength    = 16
+	defaultSenderListLength    = 32
 )
 
 type Options struct {

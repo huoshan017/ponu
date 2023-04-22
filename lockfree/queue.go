@@ -13,7 +13,6 @@ type node struct {
 type Queue struct {
 	head unsafe.Pointer
 	tail unsafe.Pointer
-	num  int32
 }
 
 func NewQueue() *Queue {
@@ -30,7 +29,6 @@ func (q *Queue) Enqueue(v any) {
 			if next == nil {
 				if cas(&tail.next, next, n) {
 					cas(&q.tail, tail, n)
-					atomic.AddInt32(&q.num, 1)
 					return
 				}
 			} else {
@@ -54,7 +52,6 @@ func (q *Queue) Dequeue() any {
 			} else {
 				v := next.value
 				if cas(&q.head, head, next) {
-					atomic.AddInt32(&q.num, 1)
 					return v
 				}
 			}

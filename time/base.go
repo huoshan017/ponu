@@ -136,13 +136,11 @@ type wheelBase struct {
 	layers         [2][]*wheelLayer
 	periodIndex    int8
 	prevLayersSize []int32
-	//lastTickTime   time.Time
-	nextTickTime time.Time
-	maxStep      int32
-	step         int32
-	state        int32
-	currId       uint32
-	id2Pos       map[uint32]struct {
+	nextTickTime   time.Time
+	maxStep        int32
+	step           int32
+	currId         uint32
+	id2Pos         map[uint32]struct {
 		list.Iterator
 		uint8
 		int8
@@ -407,14 +405,6 @@ func (w *wheelBase) handleStep() {
 	now := time.Now()
 	for iter := tlist.Begin(); iter != tlist.End(); {
 		t := iter.Value().(*Timer)
-		//var toDel bool
-		//if t.id > 0 {
-		//	_, toDel = w.toDelIdMap.LoadAndDelete(t.id)
-		//}
-		//if toDel { // 是否需要删除
-		//	iter, _ = tlist.DeleteContinueNext(iter)
-		//	putTimer(t)
-		//} else {
 		// 未到超时时间
 		if now.Sub(t.expireTime) < 0 {
 			if w.adjustTimer(t) {
@@ -422,7 +412,10 @@ func (w *wheelBase) handleStep() {
 				continue
 			}
 		}
-
+		// 删除掉map中缓存的timer id
+		if t.id > 0 {
+			delete(w.id2Pos, t.id)
+		}
 		t.triggerTime = now
 		// 处理不同sender的timer
 		if t.senderIndex > 0 {
@@ -439,15 +432,12 @@ func (w *wheelBase) handleStep() {
 			continue
 		}
 		iter = iter.Next()
-		//}
-		// 删除掉map中缓存的timer id
-		if t.id > 0 {
-			delete(w.id2Pos, t.id)
-		}
 	}
+
 	if tlist.GetLength() == 0 {
 		putList(tlist)
 	} else {
+		// index為0的timer沒有從tlist中刪除，所以遍歷完剩下的就是index為0的
 		w.index2List[0] = tlist
 		haveTimer = true
 	}
