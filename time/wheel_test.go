@@ -2,83 +2,54 @@ package time
 
 import (
 	"math/rand"
-	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	_ "net/http/pprof"
 )
 
-func TestWheelTimerMaxDuration(t *testing.T) {
+func TestWheelOneStep(t *testing.T) {
 	const (
-		timeUnit               = time.Millisecond
-		interval         int32 = 5
-		timerMaxDuration int32 = 20000 * interval
-	)
-	var (
-		w          = NewWheel(time.Duration(timerMaxDuration)*timeUnit, WithInterval(time.Duration(interval)*timeUnit))
-		en, tn, rn uint32
+		timeUnit         = time.Millisecond
+		interval         = 10
+		timerMaxDuration = 2000 * interval
 	)
 
-	var fun = TimerFunc(func(args []any) {
-		en += 1
-		r := args[0].(int32)
+	w := NewWheel(time.Duration(timerMaxDuration)*timeUnit, WithInterval(time.Duration(interval)*timeUnit))
+	defer w.Stop()
+
+	t.Logf("max steps %v", w.maxStep)
+
+	go w.Run()
+
+	var fun = func(id uint32, args []any) {
+		r := args[0].(int)
 		startTime := args[1].(time.Time)
 		triggerTime := args[2].(time.Time)
 		yt := (time.Duration(r) * timeUnit).Milliseconds()
 		st := time.Since(startTime).Milliseconds()
 		tt := triggerTime.Sub(startTime).Milliseconds()
 		if yt > st {
-			t.Fatalf("yt(%v) > st(%v)", yt, st)
+			t.Errorf("yt(%v) > st(%v)", yt, st)
 		}
-		t.Logf("executed (total count: %v, count: %v, to remove count: %v) timer func with timeout %+v, cost %v ms (diff %v), trigger %v ms (diff %v)", tn, en, rn, yt, st, st-yt, tt, tt-yt)
-	})
-
-	for i := 0; i < len(w.layers); i++ {
-		for j := 0; j < len(w.layers[i]); j++ {
-			t.Logf("layer[%v][%v] %+v", i, j, w.layers[i][j])
+		t.Logf("executed timer func with timeout %+v, cost %v ms (diff %v), trigger %v ms (diff %v)", yt, st, st-yt, tt, tt-yt)
+	}
+	sender := w.NewSender()
+	tid := sender.Add(interval*timeUnit, fun, []any{interval, time.Now()})
+	t.Logf("added timer %v", tid)
+	var (
+		loop bool = true
+	)
+	for loop {
+		tl, o := sender.GetTimerList()
+		if o {
+			tl.ExecuteFunc()
+			loop = false
 		}
 	}
-
-	t.Logf("max steps %v", w.maxStep)
-
-	defer w.Stop()
-	go w.Run()
-
-	var count int32 = 1
-	var c int32
-	var ticker = time.NewTicker(time.Second)
-	var flag bool
-	for c < count*1 {
-		select {
-		case d := <-w.C:
-			d.ExecuteFunc()
-			c += 1
-		case <-ticker.C:
-			if flag {
-				break
-			}
-			now := time.Now()
-			for i := int32(0); i < count; i++ {
-				duration := timerMaxDuration - 10*(i+1)*interval
-				id := w.Add(time.Duration(duration)*timeUnit, fun, []any{duration, now})
-				if id == 0 {
-					t.Fatalf("@@@ Add failed with timeout %v", duration)
-					return
-				}
-				/*duration = timerMaxDuration / 2
-				id = w.Add(time.Duration(duration)*timeUnit, fun, []any{duration, now})
-				if id == 0 {
-					t.Fatalf("@@@ Add failed with timeout %v", duration)
-					return
-				}*/
-			}
-			flag = true
-		}
-	}
-
-	t.Logf("complete!!!")
+	time.Sleep(time.Second)
 }
 
 func TestWheel(t *testing.T) {
@@ -92,26 +63,29 @@ func TestWheel(t *testing.T) {
 		resetDuration     int32 = timerMaxDuration
 	)
 
-	go func() {
+	/*go func() {
 		http.ListenAndServe("0.0.0.0:6060", nil)
-	}()
+	}()*/
 
-	w := NewWheel(time.Duration(timerMaxDuration)*timeUnit, WithInterval(time.Duration(interval)*timeUnit), WithTimerRecvListLength(100000))
+	w := NewWheel(time.Duration(timerMaxDuration)*timeUnit, WithInterval(time.Duration(interval)*timeUnit), WithTimerRecvListLength(4096*10), WithSenderListLength(1024))
 	defer w.Stop()
 
 	t.Logf("max steps %v", w.maxStep)
 
 	go w.Run()
 
-	var c int = 10
-	var wg sync.WaitGroup
+	var (
+		tcn, ycn, cn, lcn int32
+		c                 int = 20
+		wg                sync.WaitGroup
+	)
 	wg.Add(c)
 	for i := 0; i < c; i++ {
 		go func(index int) {
 			var (
 				timer                      = time.NewTimer(time.Duration(testDuration) * timeUnit)
 				ran                        = rand.New(rand.NewSource(time.Now().Unix()))
-				n                   uint32 = uint32(interval) * 50
+				n                   uint32 = uint32(interval) * 100
 				ac                         = 0
 				loop                       = true
 				pauseTicker                = false
@@ -125,7 +99,7 @@ func TestWheel(t *testing.T) {
 			rmTicker.C = nil
 			sender := w.NewSender()
 
-			var fun = TimerFunc(func(args []any) {
+			var fun = TimerFunc(func(id uint32, args []any) {
 				en += 1
 				r := args[0].(int32)
 				startTime := args[1].(time.Time)
@@ -133,13 +107,23 @@ func TestWheel(t *testing.T) {
 				yt := (time.Duration(r) * timeUnit).Milliseconds()
 				st := time.Since(startTime).Milliseconds()
 				tt := triggerTime.Sub(startTime).Milliseconds()
+				exec_diff := st - yt
+				trigger_diff := tt - yt
 				if yt > st {
 					t.Errorf("yt(%v) > st(%v)", yt, st)
 				}
-				if st-yt > int64(2.5*float32(interval)) {
-					t.Logf("index(%v) executed (total count: %v, count: %v, to remove count: %v) timer func with timeout %+v, cost %v ms (diff %v), trigger %v ms (diff %v)",
-						index, tn, en, rn, yt, st, st-yt, tt, tt-yt)
+				if exec_diff > int64(interval) {
+					atomic.AddInt32(&ycn, 1)
+					if exec_diff > trigger_diff*2 && trigger_diff > 2*int64(interval) {
+						//t.Logf("timer id (%v) index(%v) executed (total count: %v, count: %v, to remove count: %v) timer func with timeout %+v, cost %v ms (diff %v), trigger %v ms (diff %v)",
+						//	id, index, tn, en, rn, yt, st, st-yt, tt, tt-yt)
+						atomic.AddInt32(&cn, 1)
+						if exec_diff > trigger_diff*5 && trigger_diff > 2*int64(interval) {
+							atomic.AddInt32(&lcn, 1)
+						}
+					}
 				}
+				atomic.AddInt32(&tcn, 1)
 			})
 
 			for loop {
@@ -151,27 +135,17 @@ func TestWheel(t *testing.T) {
 
 					for i := 0; i < int(n); i++ {
 						r := interval + ran.Int31n(timerMaxDuration-interval)
-						cc := ran.Int31n(2)
-						if cc == 0 {
-							now := time.Now()
-							if !sender.Post(time.Duration(r)*timeUnit, fun, []any{r, now}) {
-								t.Errorf("@@@ Post failed with timeout %v", r)
-								continue
-							}
-							ac += 1
-						} else {
-							now := time.Now()
-							id := sender.Add(time.Duration(r)*timeUnit, fun, []any{r, now})
-							if id == 0 {
-								t.Errorf("@@@ Add failed with timeout %v", r)
-								continue
-							}
-							ac += 1
-							if minIdCount == 0 || minIdCount > id {
-								minIdCount = id
-							}
-							idCount = id
+						now := time.Now()
+						id := sender.Add(time.Duration(r)*timeUnit, fun, []any{r, now})
+						if id == 0 {
+							t.Errorf("@@@ Add failed with timeout %v", r)
+							continue
 						}
+						ac += 1
+						if minIdCount == 0 || minIdCount > id {
+							minIdCount = id
+						}
+						idCount = id
 					}
 					tn += n
 				case <-rmTicker.C:
@@ -204,7 +178,6 @@ func TestWheel(t *testing.T) {
 						}
 						tl.ExecuteFunc()
 					}
-
 				}
 			}
 
@@ -221,6 +194,7 @@ func TestWheel(t *testing.T) {
 		}
 	}
 	t.Logf("Wheel length id2Pos %v", len(w.id2Pos))
+	t.Logf("@@@ tcn = %v,  ycn = %v,  cn = %v,  lcn = %v", tcn, ycn, cn, lcn)
 }
 
 func TestWheelCancelTimer(t *testing.T) {
@@ -233,7 +207,7 @@ func TestWheelCancelTimer(t *testing.T) {
 	go w.Run()
 
 	timeout := 5 * time.Second
-	var tid = w.Add(timeout, func(args []any) {
+	var tid = w.Add(timeout, func(id uint32, args []any) {
 		t.Logf("timer timeout after %v", timeout)
 	}, nil)
 
@@ -282,7 +256,7 @@ func TestWheelX(t *testing.T) {
 				minIdCount, idCount uint32
 				en, tn, rn          uint32
 			)
-			var fun = TimerFunc(func(args []any) {
+			var fun = TimerFunc(func(id uint32, args []any) {
 				en += 1
 				r := args[0].(int32)
 				startTime := args[1].(time.Time)
@@ -392,7 +366,7 @@ func TestSWheel(t *testing.T) {
 		en, tn, rn          uint32
 	)
 
-	var fun = TimerFunc(func(args []any) {
+	var fun = TimerFunc(func(id uint32, args []any) {
 		en += 1
 		r := args[0].(int32)
 		startTime := args[1].(time.Time)
@@ -441,7 +415,6 @@ func TestSWheel(t *testing.T) {
 						continue
 					}
 					ac += 1
-					//t.Logf("@@@ Post timer func with timeout %+v and steps %v, added %v timer", time.Duration(r)*timeUnit, r/interval, ac)
 				} else {
 					id := wheel.Add(time.Duration(r)*timeUnit, fun, []any{r, now})
 					if id == 0 {
@@ -449,7 +422,6 @@ func TestSWheel(t *testing.T) {
 						continue
 					}
 					ac += 1
-					//t.Logf("@@@ Add timer func with id %v timeout %+v and steps %v, added %v timer", id, time.Duration(r)*timeUnit, r/interval, ac)
 					if minIdCount == 0 || minIdCount > id {
 						minIdCount = id
 					}

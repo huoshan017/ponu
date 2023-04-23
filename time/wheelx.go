@@ -19,14 +19,14 @@ const (
 type Requester struct {
 	wheel *WheelX
 	index int32
-	queue *lockfree.Queue
+	queue *lockfree.QueueT[TimerList]
 }
 
 func newRequester(w *WheelX, idx int32) *Requester {
 	return &Requester{
 		wheel: w,
 		index: idx,
-		queue: lockfree.NewQueue(),
+		queue: lockfree.NewQueueT[TimerList](),
 	}
 }
 
@@ -51,18 +51,18 @@ func (r *Requester) Cancel(timerId uint32) {
 }
 
 func (r *Requester) GetResult() (TimerList, bool) {
-	t := r.queue.Dequeue()
-	if t == nil {
+	t, o := r.queue.Dequeue()
+	for !o {
 		return TimerList{}, false
 	}
-	return t.(TimerList), true
+	return t, true
 }
 
 func (r *Requester) Update() {
-	t := r.queue.Dequeue()
-	if t != nil {
-		tl := t.(TimerList)
-		tl.ExecuteFunc()
+	t, o := r.queue.Dequeue()
+	for o {
+		t.ExecuteFunc()
+		t, o = r.queue.Dequeue()
 	}
 }
 
@@ -70,7 +70,7 @@ type resultQueueSender struct {
 	w *WheelX
 }
 
-func (s *resultQueueSender) Send(index int32, tlist *list.List) {
+func (s *resultQueueSender) Send(index int32, tlist *list.ListT[*Timer]) {
 	requester := s.w.requesterMap[index]
 	if requester != nil {
 		requester.queue.Enqueue(TimerList{l: tlist, m: &s.w.toDelIdMap})

@@ -14,7 +14,7 @@ type resultChanSender struct {
 	w *Wheel
 }
 
-func (s *resultChanSender) Send(index int32, tlist *list.List) {
+func (s *resultChanSender) Send(index int32, tlist *list.ListT[*Timer]) {
 	sender := s.w.senderMap[index]
 	if sender == nil {
 		// 等待通道傳過來
@@ -34,7 +34,6 @@ type Wheel struct {
 	removeCh              chan uint32
 	resultSenderCh        chan *Sender
 	senderChanListCounter int32
-	C                     <-chan TimerList
 	closeCh               chan struct{}
 	closeOnce             sync.Once
 	toDelIdMap            sync.Map
@@ -93,10 +92,6 @@ func (w *Wheel) Run() {
 			if o {
 				if w.senderMap[sender.idx] == nil {
 					w.senderMap[sender.idx] = sender
-					//if sender.idx == 0 {
-					// w.C表示第一個創建的send通道
-					//w.C = sender.ch
-					//}
 				}
 			}
 		case <-w.stepTicker.C:
@@ -163,6 +158,7 @@ func (w *Wheel) remove(id uint32) {
 
 var (
 	timerPool, listPool sync.Pool
+	nodePool            = list.NewListTNodePool[*Timer]()
 )
 
 func init() {
@@ -173,7 +169,7 @@ func init() {
 	}
 	listPool = sync.Pool{
 		New: func() any {
-			return list.New()
+			return list.NewListT(nodePool)
 		},
 	}
 }
@@ -187,11 +183,11 @@ func putTimer(t *Timer) {
 	timerPool.Put(t)
 }
 
-func getList() *list.List {
-	return listPool.Get().(*list.List)
+func getList() *list.ListT[*Timer] {
+	return listPool.Get().(*list.ListT[*Timer])
 }
 
-func putList(l *list.List) {
+func putList(l *list.ListT[*Timer]) {
 	l.Clear()
 	listPool.Put(l)
 }

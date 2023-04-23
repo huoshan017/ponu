@@ -7,7 +7,7 @@ import (
 )
 
 type IResultSender interface {
-	Send(int32, *list.List)
+	Send(int32, *list.ListT[*Timer])
 }
 
 type IWheel interface {

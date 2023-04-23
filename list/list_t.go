@@ -28,6 +28,8 @@ func (pool *ListTNodePool[T]) get() *node_t[T] {
 }
 
 func (pool *ListTNodePool[T]) put(n *node_t[T]) {
+	n.prev = nil
+	n.next = nil
 	pool.pool.Put(n)
 }
 
@@ -86,8 +88,10 @@ func NewListT[T any](pool *ListTNodePool[T]) *ListT[T] {
 	}
 }
 
-func NewListTObj[T any]() ListT[T] {
-	return ListT[T]{}
+func NewListTObj[T any](pool *ListTNodePool[T]) ListT[T] {
+	return ListT[T]{
+		nodePool: pool,
+	}
 }
 
 func (l ListT[T]) GetLength() int32 {
@@ -125,8 +129,8 @@ func (l *ListT[T]) PushBack(val T) {
 }
 
 func (l *ListT[T]) PopFront() (T, bool) {
-	var t T
 	if l.length == 0 {
+		var t T
 		return t, false
 	}
 	n := l.head
@@ -325,7 +329,7 @@ func (l *ListT[T]) REnd() IteratorT[T] {
 }
 
 func (l *ListT[T]) Duplicate() ListT[T] {
-	nl := NewListTObj[T]()
+	nl := NewListTObj(l.nodePool)
 	n := l.Begin()
 	for n != l.End() {
 		nl.PushBack(n.Value())

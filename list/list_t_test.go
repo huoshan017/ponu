@@ -127,7 +127,7 @@ func TestDeleteT(t *testing.T) {
 
 func testInsertDeleteT(t *testing.T, rt bool) {
 	var (
-		length, count int32 = 100, 100
+		length, count int32 = 10000, 10000
 		l                   = NewListT(testNodeTPool)
 		r                   = rand.New(rand.NewSource(time.Now().UnixNano()))
 		iter          IteratorT[int32]

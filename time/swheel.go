@@ -10,13 +10,12 @@ import (
 type resultExecutor struct {
 }
 
-func (e *resultExecutor) Send(index int32, tlist *list.List) {
-	d, o := tlist.PopFront()
+func (e *resultExecutor) Send(index int32, tlist *list.ListT[*Timer]) {
+	timer, o := tlist.PopFront()
 	for o {
-		t := d.(*Timer)
-		t.arg = append(t.arg, t.triggerTime)
-		t.fun(t.arg)
-		d, o = tlist.PopFront()
+		timer.arg = append(timer.arg, timer.triggerTime)
+		timer.fun(timer.id, timer.arg)
+		timer, o = tlist.PopFront()
 	}
 	putList(tlist)
 }
