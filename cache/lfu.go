@@ -15,11 +15,12 @@ type node[K comparable, V any] struct {
 }
 
 type lfuBase[K comparable, V any] struct {
-	cap       int32
-	totalSize *int32
-	l         list.List
-	k2i       map[K]list.Iterator
-	f2i       map[int32]list.Iterator // 保存訪問次數對應的迭代器，這個迭代器是該訪問次數下最新的，如果有更新的迭代器，則插在它之後
+	cap         int32
+	reclaimFunc func(V)
+	totalSize   *int32
+	l           list.List
+	k2i         map[K]list.Iterator
+	f2i         map[int32]list.Iterator // 保存訪問次數對應的迭代器，這個迭代器是該訪問次數下最新的，如果有更新的迭代器，則插在它之後
 }
 
 func newLFUBase[K comparable, V any](cap int32) *lfuBase[K, V] {
@@ -39,6 +40,10 @@ func newLFUBaseWithTotalSize[K comparable, V any](cap int32, totalSize *int32) *
 		k2i:       make(map[K]list.Iterator),
 		f2i:       make(map[int32]list.Iterator),
 	}
+}
+
+func (lfu *lfuBase[K, V]) SetReclaimFunc(fun func(V)) {
+	lfu.reclaimFunc = fun
 }
 
 func (lfu *lfuBase[K, V]) Set(key K, value V) {
@@ -119,6 +124,9 @@ func (lfu *lfuBase[K, V]) Delete(key K) bool {
 	}
 	delete(lfu.k2i, key)
 	lfu.l.Delete(iter)
+	if lfu.reclaimFunc != nil {
+		lfu.reclaimFunc(n.v)
+	}
 	if lfu.totalSize != nil {
 		atomic.AddInt32(lfu.totalSize, -1)
 	}
@@ -227,6 +235,9 @@ func (lfu *lfuBase[K, V]) deleteFirst() bool {
 	}
 	delete(lfu.k2i, n.k)
 	lfu.l.PopFront()
+	if lfu.reclaimFunc != nil {
+		lfu.reclaimFunc(n.v)
+	}
 	return true
 }
 
@@ -268,6 +279,12 @@ func newLFUWithLockAndTotalSize[K comparable, V any](cap int32, totalSize *int32
 	return &LFUWithLock[K, V]{
 		lfuBase: newLFUBaseWithTotalSize[K, V](cap, totalSize),
 	}
+}
+
+func (lfu *LFUWithLock[K, V]) SetReclaimFunc(fun func(V)) {
+	lfu.rwlock.Lock()
+	defer lfu.rwlock.Unlock()
+	lfu.lfuBase.SetReclaimFunc(fun)
 }
 
 func (lfu *LFUWithLock[K, V]) Set(key K, value V) {
