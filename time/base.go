@@ -9,12 +9,12 @@ import (
 	"github.com/huoshan017/ponu/list"
 )
 
-type TimerFunc func(id uint32, arg []any)
+type TimerFunc func(id uint32, args []any)
 
 type Timer struct {
 	id          uint32
 	fun         TimerFunc
-	arg         []any
+	args        []any
 	timeout     time.Duration
 	expireTime  time.Time
 	senderIndex int32
@@ -24,7 +24,7 @@ type Timer struct {
 
 func (t *Timer) Clean() {
 	t.id = 0
-	t.arg = nil
+	t.args = nil
 	t.fun = nil
 	t.leftStep = 0
 }
@@ -118,8 +118,8 @@ func (t *TimerList) ExecuteFunc() {
 			_, del = t.m.LoadAndDelete(timer.id)
 		}
 		if !del {
-			timer.arg = append(timer.arg, timer.triggerTime)
-			timer.fun(timer.id, timer.arg)
+			timer.args = append(timer.args, timer.triggerTime)
+			timer.fun(timer.id, timer.args)
 		}
 		putTimer(timer)
 		timer, o = t.l.PopFront()

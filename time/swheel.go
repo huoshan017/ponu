@@ -13,8 +13,8 @@ type resultExecutor struct {
 func (e *resultExecutor) Send(index int32, tlist *list.ListT[*Timer]) {
 	timer, o := tlist.PopFront()
 	for o {
-		timer.arg = append(timer.arg, timer.triggerTime)
-		timer.fun(timer.id, timer.arg)
+		timer.args = append(timer.args, timer.triggerTime)
+		timer.fun(timer.id, timer.args)
 		timer, o = tlist.PopFront()
 	}
 	putList(tlist)
@@ -86,7 +86,7 @@ func (w *SWheel) add(index int32, id uint32, timeout time.Duration, fun TimerFun
 	t.id = id
 	t.timeout = timeout
 	t.fun = fun
-	t.arg = args
+	t.args = args
 	t.expireTime = time.Now().Add(timeout)
 	if !w.addTimeout(t) {
 		putTimer(t)

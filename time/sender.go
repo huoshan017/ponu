@@ -8,16 +8,18 @@ import (
 )
 
 type Sender struct {
-	wheel *Wheel
-	idx   int32
-	tlist *lockfree.QueueT[TimerList]
+	wheel  *Wheel
+	idx    int32
+	tlist  *lockfree.QueueT[TimerList]
+	tilist *lockfree.QueueT[*Timer]
 }
 
 func newSender(wheel *Wheel, idx int32) *Sender {
 	sender := &Sender{
-		wheel: wheel,
-		idx:   idx,
-		tlist: lockfree.NewQueueT[TimerList](),
+		wheel:  wheel,
+		idx:    idx,
+		tlist:  lockfree.NewQueueT[TimerList](),
+		tilist: lockfree.NewQueueT[*Timer](),
 	}
 	wheel.resultSenderCh <- sender
 	return sender

@@ -189,7 +189,7 @@ func (w *WheelX) request(idx int32, id uint32, timeout time.Duration, fun TimerF
 	t.id = id
 	t.timeout = timeout
 	t.fun = fun
-	t.arg = args
+	t.args = args
 	t.expireTime = time.Now().Add(timeout)
 	w.reqList.PushBack(struct {
 		typ  int32

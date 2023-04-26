@@ -146,7 +146,7 @@ func (w *Wheel) add(idx int32, id uint32, timeout time.Duration, fun TimerFunc, 
 	t.id = id
 	t.timeout = timeout
 	t.fun = fun
-	t.arg = args
+	t.args = args
 	t.expireTime = time.Now().Add(timeout)
 	w.addCh <- t
 }
