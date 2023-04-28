@@ -169,7 +169,7 @@ func init() {
 	}
 	listPool = sync.Pool{
 		New: func() any {
-			return list.NewListT(nodePool)
+			return list.NewListTWithPool(nodePool)
 		},
 	}
 }

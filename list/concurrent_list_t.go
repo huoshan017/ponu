@@ -13,7 +13,7 @@ type ConcurrentListT[T any] struct {
 
 func NewConcurrentListT[T any](pool *ListTNodePool[T]) *ConcurrentListT[T] {
 	cl := &ConcurrentListT[T]{
-		ListT: NewListTObj(pool),
+		ListT: NewListTObjWithPool(pool),
 	}
 	cl.notFullCond = sync.NewCond(&cl.mutex)
 	cl.notEmptyCond = sync.NewCond(&cl.mutex)

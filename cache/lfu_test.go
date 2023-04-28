@@ -11,6 +11,10 @@ import (
 	"github.com/huoshan017/ponu/log"
 )
 
+var (
+	nodePool = list.NewListTNodePool[Pair[int32, int32]]()
+)
+
 func TestLFU(t *testing.T) {
 	var (
 		cap     int32 = 50
@@ -20,7 +24,6 @@ func TestLFU(t *testing.T) {
 		s             = rand.NewSource(time.Now().Unix())
 		r             = rand.New(s)
 		n, k, v int32
-		iter    list.Iterator
 	)
 
 	for n = 0; n < loopNum; n++ {
@@ -51,11 +54,12 @@ func TestLFU(t *testing.T) {
 		}
 	}
 
-	dl := l.ToList()
+	var dl *list.ListT[Pair[int32, int32]] = list.NewListT[Pair[int32, int32]]()
+	l.ToList(dl)
 
-	iter = dl.Begin()
+	iter := dl.Begin()
 	for iter != dl.End() {
-		delete(l.k2i, iter.Value().(node[int32, int32]).k)
+		delete(l.k2i, iter.Value().k)
 		iter = iter.Next()
 	}
 
@@ -67,6 +71,40 @@ func TestLFU(t *testing.T) {
 	}
 
 	l.Clear()
+}
+
+func TestLFUExpire(t *testing.T) {
+	var (
+		cap     int32 = 500
+		loopNum int32 = 5000
+		maxKey  int32 = 50000
+		l             = NewLFU[int32, int32](cap)
+		s             = rand.NewSource(time.Now().Unix())
+		r             = rand.New(s)
+		n, k, v int32
+	)
+
+	l.SetExpiredtime(time.Second * 4)
+
+	for n = 0; n < loopNum; n++ {
+		k = r.Int31n(maxKey) + 1
+		v = r.Int31n(maxKey) + 1
+		l.Set(k, v)
+	}
+
+	time.Sleep(time.Second * 3)
+
+	for n = 0; n < loopNum; n++ {
+		k = r.Int31n(maxKey) + 1
+		v = r.Int31n(maxKey) + 1
+		l.Set(k, v)
+	}
+
+	time.Sleep(time.Second)
+
+	lis := list.NewListTWithPool(nodePool)
+	l.ToList(lis)
+	t.Logf("lis length: %v", lis.GetLength())
 }
 
 func TestLFUWithLock(t *testing.T) {

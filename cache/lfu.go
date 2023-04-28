@@ -4,46 +4,68 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/huoshan017/ponu/list"
 )
 
+const (
+	minCap         = 8
+	minExpiredTime = time.Second
+)
+
 type node[K comparable, V any] struct {
-	k K
-	v V
+	Pair[K, V]
 	f int32
 }
 
 type lfuBase[K comparable, V any] struct {
-	cap         int32
-	reclaimFunc func(V)
-	totalSize   *int32
-	l           list.List
-	k2i         map[K]list.Iterator
+	cap         int32                   // 容量
+	reclaimFunc func(V)                 // value的回收内存函数
+	expiredTime time.Duration           // 超时淘汰时间(秒)
+	ts          *int32                  // 总大小
+	l           list.List               // 数据列表
+	k2i         map[K]list.Iterator     // key对应的列表节点
 	f2i         map[int32]list.Iterator // 保存訪問次數對應的迭代器，這個迭代器是該訪問次數下最新的，如果有更新的迭代器，則插在它之後
+	checkTime   time.Time               // 检测时间
+	k2t         map[K]time.Time         // key对应的时间点
 }
 
 func newLFUBase[K comparable, V any](cap int32) *lfuBase[K, V] {
+	if cap < minCap {
+		cap = minCap
+	}
 	return &lfuBase[K, V]{
-		cap: cap,
-		l:   list.NewObj(),
-		k2i: make(map[K]list.Iterator),
-		f2i: make(map[int32]list.Iterator),
+		cap:       cap,
+		l:         list.NewObj(),
+		k2i:       make(map[K]list.Iterator),
+		f2i:       make(map[int32]list.Iterator),
+		checkTime: time.Now(),
+		k2t:       make(map[K]time.Time),
 	}
 }
 
 func newLFUBaseWithTotalSize[K comparable, V any](cap int32, totalSize *int32) *lfuBase[K, V] {
+	if cap < minCap {
+		cap = minCap
+	}
 	return &lfuBase[K, V]{
 		cap:       cap,
-		totalSize: totalSize,
+		ts:        totalSize,
 		l:         list.NewObj(),
 		k2i:       make(map[K]list.Iterator),
 		f2i:       make(map[int32]list.Iterator),
+		checkTime: time.Now(),
+		k2t:       make(map[K]time.Time),
 	}
 }
 
 func (lfu *lfuBase[K, V]) SetReclaimFunc(fun func(V)) {
 	lfu.reclaimFunc = fun
+}
+
+func (lfu *lfuBase[K, V]) SetExpiredtime(t time.Duration) {
+	lfu.expiredTime = t
 }
 
 func (lfu *lfuBase[K, V]) Set(key K, value V) {
@@ -53,20 +75,26 @@ func (lfu *lfuBase[K, V]) Set(key K, value V) {
 	if lfu.f2i == nil {
 		lfu.f2i = make(map[int32]list.Iterator)
 	}
+	if lfu.k2t == nil {
+		lfu.k2t = make(map[K]time.Time)
+	}
+
+	lfu.checkExpired()
+
 	iter, o := lfu.k2i[key]
 	if !o { // 插入
-		if lfu.totalSize == nil {
-			if lfu.cap > 0 && lfu.cap <= int32(len(lfu.k2i)) { // 超出容量大小
+		if lfu.ts == nil {
+			if lfu.cap <= int32(len(lfu.k2i)) { // 超出容量大小
 				lfu.deleteFirst()
 			}
 			lfu.add(key, value)
 		} else {
-			if lfu.cap <= atomic.LoadInt32(lfu.totalSize) { // 原子操作判斷大小已達最大容量
+			if lfu.cap <= atomic.LoadInt32(lfu.ts) { // 原子操作判斷大小已達最大容量
 				// 刪除掉一個最不常訪問的，再添加一個，保持總數量不變
 				// 如果刪除失敗，表示鏈表已空，總數量加一。
 				// 對於一個Shard來説，同一時間保證只有一個goroutine對其Set操作
 				if !lfu.deleteFirst() {
-					atomic.AddInt32(lfu.totalSize, 1)
+					atomic.AddInt32(lfu.ts, 1)
 				}
 				lfu.add(key, value)
 			} else {
@@ -75,9 +103,9 @@ func (lfu *lfuBase[K, V]) Set(key K, value V) {
 				// 1. 大於容量cap，表示這中間有其他goroutine添加了元素，則把當前大小減一(盡可能快，
 				//	  因爲會影響到其他goroutine)，刪掉一個再添加一個，保持總數量不變
 				// 2. 小於等於cap，則直接添加元素
-				if lfu.cap < atomic.AddInt32(lfu.totalSize, 1) {
+				if lfu.cap < atomic.AddInt32(lfu.ts, 1) {
 					if lfu.deleteFirst() {
-						atomic.AddInt32(lfu.totalSize, -1)
+						atomic.AddInt32(lfu.ts, -1)
 					}
 					lfu.add(key, value)
 				} else {
@@ -91,15 +119,12 @@ func (lfu *lfuBase[K, V]) Set(key K, value V) {
 }
 
 func (lfu *lfuBase[K, V]) Get(key K) (V, bool) {
-	var (
-		iter list.Iterator
-		v    V
-		o    bool
-	)
+	var v V
 	if lfu.k2i == nil {
 		return v, false
 	}
-	iter, o = lfu.k2i[key]
+	lfu.checkExpired()
+	iter, o := lfu.k2i[key]
 	if !o {
 		return v, false
 	}
@@ -110,45 +135,31 @@ func (lfu *lfuBase[K, V]) Get(key K) (V, bool) {
 }
 
 func (lfu *lfuBase[K, V]) Delete(key K) bool {
-	var (
-		iter list.Iterator
-		o    bool
-	)
-	iter, o = lfu.k2i[key]
-	if !o {
-		return false
-	}
-	n := iter.Value().(node[K, V])
-	if iter == lfu.f2i[n.f] {
-		lfu.updateFrequency(iter, n.f)
-	}
-	delete(lfu.k2i, key)
-	lfu.l.Delete(iter)
-	if lfu.reclaimFunc != nil {
-		lfu.reclaimFunc(n.v)
-	}
-	if lfu.totalSize != nil {
-		atomic.AddInt32(lfu.totalSize, -1)
-	}
-	return true
+	lfu.checkExpired()
+	return lfu.delete(key)
 }
 
 func (lfu *lfuBase[K, V]) Has(key K) bool {
+	lfu.checkExpired()
 	_, o := lfu.k2i[key]
 	return o
 }
 
-func (lfu *lfuBase[K, V]) ToList() list.List {
-	l := lfu.l.Duplicate()
-	return l
+func (lfu *lfuBase[K, V]) ToList(lis *list.ListT[Pair[K, V]]) {
+	lfu.checkExpired()
+	for iter := lfu.l.Begin(); iter != lfu.l.End(); iter = iter.Next() {
+		n := iter.Value().(node[K, V])
+		lis.PushBack(Pair[K, V]{k: n.k, v: n.v})
+	}
 }
 
 func (lfu *lfuBase[K, V]) Clear() {
 	lfu.l.Clear()
 	lfu.k2i = nil
 	lfu.f2i = nil
-	if lfu.totalSize != nil {
-		atomic.AddInt32(lfu.totalSize, -lfu.l.GetLength())
+	lfu.k2t = nil
+	if lfu.ts != nil {
+		atomic.AddInt32(lfu.ts, -lfu.l.GetLength())
 	}
 }
 
@@ -186,7 +197,7 @@ func (lfu *lfuBase[K, V]) updateValue(iter list.Iterator, update bool, val V) {
 		if !lfu.l.Delete(iter) {
 			panic("ponu cache: lfu delete iter failed")
 		}
-		delete(lfu.k2i, n.k)
+		//delete(lfu.k2i, n.k)
 		if has2 {
 			iter = lfu.l.InsertContinue(n, niter2)
 		} else {
@@ -199,14 +210,14 @@ func (lfu *lfuBase[K, V]) updateValue(iter list.Iterator, update bool, val V) {
 			if !lfu.l.Delete(iter) {
 				panic("ponu cache: lfu delete iter failed")
 			}
-			delete(lfu.k2i, n.k)
+			//delete(lfu.k2i, n.k)
 			iter = lfu.l.InsertContinue(n, niter2)
 			lfu.k2i[n.k] = iter
 		} else { // 沒有f+1次訪問的元素，則表示更新前後位置不變，直接修改元素值
 			lfu.l.Update(n, iter)
 		}
 	}
-
+	lfu.k2t[n.k] = time.Now()
 	lfu.f2i[n.f] = iter
 }
 
@@ -235,8 +246,29 @@ func (lfu *lfuBase[K, V]) deleteFirst() bool {
 	}
 	delete(lfu.k2i, n.k)
 	lfu.l.PopFront()
+	delete(lfu.k2t, n.k)
 	if lfu.reclaimFunc != nil {
 		lfu.reclaimFunc(n.v)
+	}
+	return true
+}
+
+func (lfu *lfuBase[K, V]) delete(key K) bool {
+	iter, o := lfu.k2i[key]
+	if !o {
+		return false
+	}
+	n := iter.Value().(node[K, V])
+	if iter == lfu.f2i[n.f] {
+		lfu.updateFrequency(iter, n.f)
+	}
+	delete(lfu.k2i, key)
+	lfu.l.Delete(iter)
+	if lfu.reclaimFunc != nil {
+		lfu.reclaimFunc(n.v)
+	}
+	if lfu.ts != nil {
+		atomic.AddInt32(lfu.ts, -1)
 	}
 	return true
 }
@@ -245,22 +277,55 @@ func (lfu *lfuBase[K, V]) add(key K, value V) {
 	var iter list.Iterator
 	niter, o := lfu.f2i[1]
 	if !o { // 沒有訪問次數為1對應的迭代器，則新插入的元素肯定為訪問頻次最低的元素，放在鏈表頭
-		lfu.l.PushFront(node[K, V]{k: key, v: value, f: 1})
+		lfu.l.PushFront(node[K, V]{Pair: Pair[K, V]{k: key, v: value}, f: 1})
 		iter = lfu.l.Begin()
 	} else { // 把該元素插入到同訪問頻次下最近被訪問的元素之後，然後該新插入元素的迭代器為同頻次最近訪問的
-		iter = lfu.l.InsertContinue(node[K, V]{k: key, v: value, f: 1}, niter)
+		iter = lfu.l.InsertContinue(node[K, V]{Pair: Pair[K, V]{k: key, v: value}, f: 1}, niter)
 	}
 	lfu.f2i[1] = iter
 	lfu.k2i[key] = iter
+	lfu.k2t[key] = time.Now()
+}
+
+func (lfu *lfuBase[K, V]) checkExpired() {
+	if lfu.expiredTime <= 0 {
+		return
+	}
+	now := time.Now()
+	if now.Sub(lfu.checkTime) < time.Second {
+		return
+	}
+	for iter := lfu.l.Begin(); iter != lfu.l.End(); {
+		kv := iter.Value().(node[K, V])
+		t, o := lfu.k2t[kv.k]
+		if !o {
+			panic(fmt.Sprintf("ponu: lfu cache not found start time with key %v", kv.k))
+		}
+		if now.Sub(t) < lfu.expiredTime {
+			break
+		}
+		if iter == lfu.f2i[kv.f] {
+			lfu.updateFrequency(iter, kv.f)
+		}
+		delete(lfu.k2i, kv.k)
+		if lfu.reclaimFunc != nil {
+			lfu.reclaimFunc(kv.v)
+		}
+		if lfu.ts != nil {
+			atomic.AddInt32(lfu.ts, -1)
+		}
+		iter, _ = lfu.l.DeleteContinueNext(iter)
+	}
+	lfu.checkTime = now
 }
 
 type LFU[K comparable, V any] struct {
-	lfuBase[K, V]
+	*lfuBase[K, V]
 }
 
 func NewLFU[K comparable, V any](cap int32) *LFU[K, V] {
 	return &LFU[K, V]{
-		*newLFUBase[K, V](cap),
+		newLFUBase[K, V](cap),
 	}
 }
 
@@ -311,10 +376,10 @@ func (lfu *LFUWithLock[K, V]) Delete(key K) bool {
 	return lfu.lfuBase.Delete(key)
 }
 
-func (lfu *LFUWithLock[K, V]) ToList() list.List {
+func (lfu *LFUWithLock[K, V]) ToList(lis *list.ListT[Pair[K, V]]) {
 	lfu.rwlock.RLock()
 	defer lfu.rwlock.RUnlock()
-	return lfu.lfuBase.ToList()
+	lfu.lfuBase.ToList(lis)
 }
 
 func (lfu *LFUWithLock[K, V]) Clear() {

@@ -11,7 +11,7 @@ var testNodeTPool = NewListTNodePool[int32]()
 func TestListT(t *testing.T) {
 	var (
 		r       = rand.New(rand.NewSource(time.Now().UnixNano()))
-		l       = NewListT(testNodeTPool)
+		l       = NewListTWithPool(testNodeTPool)
 		length  = 10000
 		valList []int32
 		v       int32
@@ -41,7 +41,7 @@ func TestListT(t *testing.T) {
 func TestIteratorT(t *testing.T) {
 	var (
 		length  int32 = 1000
-		l             = NewListT(testNodeTPool)
+		l             = NewListTWithPool(testNodeTPool)
 		r             = rand.New(rand.NewSource(time.Now().UnixNano()))
 		valList []int32
 		o       bool
@@ -71,7 +71,7 @@ func TestIteratorT(t *testing.T) {
 func TestInsertT(t *testing.T) {
 	var (
 		length  int32 = 1000000
-		l             = NewListT(testNodeTPool)
+		l             = NewListTWithPool(testNodeTPool)
 		r             = rand.New(rand.NewSource(time.Now().UnixNano()))
 		valList []int32
 	)
@@ -97,7 +97,7 @@ func TestInsertT(t *testing.T) {
 func TestDeleteT(t *testing.T) {
 	var (
 		length  int32 = 20000
-		l             = NewListT(testNodeTPool)
+		l             = NewListTWithPool(testNodeTPool)
 		r             = rand.New(rand.NewSource(time.Now().UnixNano()))
 		valList []int32
 		iter    IteratorT[int32]
@@ -128,7 +128,7 @@ func TestDeleteT(t *testing.T) {
 func testInsertDeleteT(t *testing.T, rt bool) {
 	var (
 		length, count int32 = 10000, 10000
-		l                   = NewListT(testNodeTPool)
+		l                   = NewListTWithPool(testNodeTPool)
 		r                   = rand.New(rand.NewSource(time.Now().UnixNano()))
 		iter          IteratorT[int32]
 		o             bool

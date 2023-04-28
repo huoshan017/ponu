@@ -82,13 +82,21 @@ type ListT[T any] struct {
 	nodePool   *ListTNodePool[T]
 }
 
-func NewListT[T any](pool *ListTNodePool[T]) *ListT[T] {
+func NewListT[T any]() *ListT[T] {
+	return &ListT[T]{}
+}
+
+func NewListTObj[T any]() ListT[T] {
+	return ListT[T]{}
+}
+
+func NewListTWithPool[T any](pool *ListTNodePool[T]) *ListT[T] {
 	return &ListT[T]{
 		nodePool: pool,
 	}
 }
 
-func NewListTObj[T any](pool *ListTNodePool[T]) ListT[T] {
+func NewListTObjWithPool[T any](pool *ListTNodePool[T]) ListT[T] {
 	return ListT[T]{
 		nodePool: pool,
 	}
@@ -103,7 +111,12 @@ func (l ListT[T]) IsEmpty() bool {
 }
 
 func (l *ListT[T]) PushFront(val T) {
-	n := l.nodePool.get()
+	var n *node_t[T]
+	if l.nodePool == nil {
+		n = &node_t[T]{}
+	} else {
+		n = l.nodePool.get()
+	}
 	n.value = val
 	n.next = l.head
 	if l.head == nil {
@@ -116,7 +129,12 @@ func (l *ListT[T]) PushFront(val T) {
 }
 
 func (l *ListT[T]) PushBack(val T) {
-	n := l.nodePool.get()
+	var n *node_t[T]
+	if l.nodePool == nil {
+		n = &node_t[T]{}
+	} else {
+		n = l.nodePool.get()
+	}
 	n.value = val
 	n.prev = l.tail
 	if l.head == nil {
@@ -143,7 +161,9 @@ func (l *ListT[T]) PopFront() (T, bool) {
 	}
 	l.length -= 1
 	value := n.value
-	l.nodePool.put(n)
+	if l.nodePool != nil {
+		l.nodePool.put(n)
+	}
 	return value, true
 }
 
@@ -161,7 +181,9 @@ func (l *ListT[T]) PopBack() (T, bool) {
 	}
 	l.length -= 1
 	value := n.value
-	l.nodePool.put(n)
+	if l.nodePool != nil {
+		l.nodePool.put(n)
+	}
 	return value, true
 }
 
@@ -193,7 +215,12 @@ func (l *ListT[T]) insertBefore(val T, before IteratorT[T]) *node_t[T] {
 }
 
 func (l *ListT[T]) insert(val T, after IteratorT[T]) *node_t[T] {
-	n := l.nodePool.get()
+	var n *node_t[T]
+	if l.nodePool == nil {
+		n = &node_t[T]{}
+	} else {
+		n = l.nodePool.get()
+	}
 	n.value = val
 	if after.n == nil || after.n == (*node_t[T])(nullTNodePtr) {
 		if l.head == nil {
@@ -275,14 +302,18 @@ func (l *ListT[T]) delete(iter IteratorT[T]) {
 	if l.length == 0 {
 		l.tail = nil
 	}
-	l.nodePool.put(iter.n)
+	if l.nodePool != nil {
+		l.nodePool.put(iter.n)
+	}
 }
 
 func (l *ListT[T]) Clear() {
 	n := l.head
 	for n != nil {
 		nn := n.next
-		l.nodePool.put(n)
+		if l.nodePool != nil {
+			l.nodePool.put(n)
+		}
 		n = nn
 	}
 	l.head = nil
@@ -329,7 +360,7 @@ func (l *ListT[T]) REnd() IteratorT[T] {
 }
 
 func (l *ListT[T]) Duplicate() ListT[T] {
-	nl := NewListTObj(l.nodePool)
+	nl := NewListTObj[T]()
 	n := l.Begin()
 	for n != l.End() {
 		nl.PushBack(n.Value())
