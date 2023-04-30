@@ -22,13 +22,13 @@ type node[K comparable, V any] struct {
 type lfuBase[K comparable, V any] struct {
 	cap         int32                   // 容量
 	reclaimFunc func(V)                 // value的回收内存函数
-	expiredTime time.Duration           // 超时淘汰时间(秒)
+	expiredTime time.Duration           // 超时淘汰时间
 	ts          *int32                  // 总大小
 	l           list.List               // 数据列表
 	k2i         map[K]list.Iterator     // key对应的列表节点
 	f2i         map[int32]list.Iterator // 保存訪問次數對應的迭代器，這個迭代器是該訪問次數下最新的，如果有更新的迭代器，則插在它之後
-	checkTime   time.Time               // 检测时间
-	k2t         map[K]time.Time         // key对应的时间点
+	createTime  time.Time               // 创建时间
+	k2t         map[K]time.Duration     // key对应的时间点
 }
 
 func newLFUBase[K comparable, V any](cap int32) *lfuBase[K, V] {
@@ -36,12 +36,12 @@ func newLFUBase[K comparable, V any](cap int32) *lfuBase[K, V] {
 		cap = minCap
 	}
 	return &lfuBase[K, V]{
-		cap:       cap,
-		l:         list.NewObj(),
-		k2i:       make(map[K]list.Iterator),
-		f2i:       make(map[int32]list.Iterator),
-		checkTime: time.Now(),
-		k2t:       make(map[K]time.Time),
+		cap:        cap,
+		l:          list.NewObj(),
+		k2i:        make(map[K]list.Iterator),
+		f2i:        make(map[int32]list.Iterator),
+		createTime: time.Now(),
+		k2t:        make(map[K]time.Duration),
 	}
 }
 
@@ -50,14 +50,22 @@ func newLFUBaseWithTotalSize[K comparable, V any](cap int32, totalSize *int32) *
 		cap = minCap
 	}
 	return &lfuBase[K, V]{
-		cap:       cap,
-		ts:        totalSize,
-		l:         list.NewObj(),
-		k2i:       make(map[K]list.Iterator),
-		f2i:       make(map[int32]list.Iterator),
-		checkTime: time.Now(),
-		k2t:       make(map[K]time.Time),
+		cap:        cap,
+		ts:         totalSize,
+		l:          list.NewObj(),
+		k2i:        make(map[K]list.Iterator),
+		f2i:        make(map[int32]list.Iterator),
+		createTime: time.Now(),
+		k2t:        make(map[K]time.Duration),
 	}
+}
+
+func (lfu *lfuBase[K, V]) getExpiredTimePoint(now time.Time, duration time.Duration) time.Duration {
+	return now.Sub(lfu.createTime) + duration
+}
+
+func (lfu *lfuBase[K, V]) isExpired(now time.Time, timePoint time.Duration) bool {
+	return now.Sub(lfu.createTime) >= timePoint
 }
 
 func (lfu *lfuBase[K, V]) SetReclaimFunc(fun func(V)) {
@@ -65,6 +73,9 @@ func (lfu *lfuBase[K, V]) SetReclaimFunc(fun func(V)) {
 }
 
 func (lfu *lfuBase[K, V]) SetExpiredtime(t time.Duration) {
+	if t < minExpiredTime {
+		t = minExpiredTime
+	}
 	lfu.expiredTime = t
 }
 
@@ -76,11 +87,8 @@ func (lfu *lfuBase[K, V]) Set(key K, value V) {
 		lfu.f2i = make(map[int32]list.Iterator)
 	}
 	if lfu.k2t == nil {
-		lfu.k2t = make(map[K]time.Time)
+		lfu.k2t = make(map[K]time.Duration)
 	}
-
-	lfu.checkExpired()
-
 	iter, o := lfu.k2i[key]
 	if !o { // 插入
 		if lfu.ts == nil {
@@ -116,6 +124,40 @@ func (lfu *lfuBase[K, V]) Set(key K, value V) {
 	} else { // 更新
 		lfu.updateValue(iter, true, value)
 	}
+	if lfu.expiredTime > 0 {
+		lfu.k2t[key] = lfu.getExpiredTimePoint(time.Now(), lfu.expiredTime)
+	}
+}
+
+func (lfu *lfuBase[K, V]) SetExpired(key K, value V, expiredTime time.Duration) {
+	if lfu.k2i == nil {
+		lfu.k2i = make(map[K]list.Iterator)
+	}
+	if lfu.f2i == nil {
+		lfu.f2i = make(map[int32]list.Iterator)
+	}
+	if lfu.k2t == nil {
+		lfu.k2t = make(map[K]time.Duration)
+	}
+	iter, o := lfu.k2i[key]
+	if !o {
+		if lfu.cap <= int32(len(lfu.k2i)) { // 超出容量大小
+			lfu.deleteFirst()
+		}
+		lfu.add(key, value)
+	} else {
+		lfu.updateValue(iter, true, value)
+	}
+	lfu.k2t[key] = lfu.getExpiredTimePoint(time.Now(), expiredTime)
+}
+
+func (lfu *lfuBase[K, V]) isKeyExpired(key K) bool {
+	if d, o := lfu.k2t[key]; o {
+		if lfu.isExpired(time.Now(), d) {
+			return true
+		}
+	}
+	return false
 }
 
 func (lfu *lfuBase[K, V]) Get(key K) (V, bool) {
@@ -123,9 +165,12 @@ func (lfu *lfuBase[K, V]) Get(key K) (V, bool) {
 	if lfu.k2i == nil {
 		return v, false
 	}
-	lfu.checkExpired()
 	iter, o := lfu.k2i[key]
 	if !o {
+		return v, false
+	}
+	if lfu.isKeyExpired(key) {
+		lfu.delete(key)
 		return v, false
 	}
 	// iter在update之後有可能會失效，所以要在update之前取到其中的值
@@ -135,21 +180,30 @@ func (lfu *lfuBase[K, V]) Get(key K) (V, bool) {
 }
 
 func (lfu *lfuBase[K, V]) Delete(key K) bool {
-	lfu.checkExpired()
 	return lfu.delete(key)
 }
 
 func (lfu *lfuBase[K, V]) Has(key K) bool {
-	lfu.checkExpired()
 	_, o := lfu.k2i[key]
+	if o {
+		if lfu.isKeyExpired(key) {
+			lfu.delete(key)
+			return false
+		}
+	}
 	return o
 }
 
 func (lfu *lfuBase[K, V]) ToList(lis *list.ListT[Pair[K, V]]) {
-	lfu.checkExpired()
-	for iter := lfu.l.Begin(); iter != lfu.l.End(); iter = iter.Next() {
+	for iter := lfu.l.Begin(); iter != lfu.l.End(); {
 		n := iter.Value().(node[K, V])
+		if lfu.isKeyExpired(n.k) {
+			iter = iter.Next()
+			lfu.delete(n.k)
+			continue
+		}
 		lis.PushBack(Pair[K, V]{k: n.k, v: n.v})
+		iter = iter.Next()
 	}
 }
 
@@ -217,7 +271,6 @@ func (lfu *lfuBase[K, V]) updateValue(iter list.Iterator, update bool, val V) {
 			lfu.l.Update(n, iter)
 		}
 	}
-	lfu.k2t[n.k] = time.Now()
 	lfu.f2i[n.f] = iter
 }
 
@@ -264,6 +317,7 @@ func (lfu *lfuBase[K, V]) delete(key K) bool {
 	}
 	delete(lfu.k2i, key)
 	lfu.l.Delete(iter)
+	delete(lfu.k2t, n.k)
 	if lfu.reclaimFunc != nil {
 		lfu.reclaimFunc(n.v)
 	}
@@ -284,39 +338,9 @@ func (lfu *lfuBase[K, V]) add(key K, value V) {
 	}
 	lfu.f2i[1] = iter
 	lfu.k2i[key] = iter
-	lfu.k2t[key] = time.Now()
-}
-
-func (lfu *lfuBase[K, V]) checkExpired() {
-	if lfu.expiredTime <= 0 {
-		return
+	if lfu.expiredTime > 0 {
+		lfu.k2t[key] = lfu.getExpiredTimePoint(time.Now(), lfu.expiredTime)
 	}
-	now := time.Now()
-	if now.Sub(lfu.checkTime) < time.Second {
-		return
-	}
-	for iter := lfu.l.Begin(); iter != lfu.l.End(); {
-		kv := iter.Value().(node[K, V])
-		t, o := lfu.k2t[kv.k]
-		if !o {
-			panic(fmt.Sprintf("ponu: lfu cache not found start time with key %v", kv.k))
-		}
-		if now.Sub(t) < lfu.expiredTime {
-			break
-		}
-		if iter == lfu.f2i[kv.f] {
-			lfu.updateFrequency(iter, kv.f)
-		}
-		delete(lfu.k2i, kv.k)
-		if lfu.reclaimFunc != nil {
-			lfu.reclaimFunc(kv.v)
-		}
-		if lfu.ts != nil {
-			atomic.AddInt32(lfu.ts, -1)
-		}
-		iter, _ = lfu.l.DeleteContinueNext(iter)
-	}
-	lfu.checkTime = now
 }
 
 type LFU[K comparable, V any] struct {

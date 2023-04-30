@@ -84,15 +84,7 @@ func TestLFUExpire(t *testing.T) {
 		n, k, v int32
 	)
 
-	l.SetExpiredtime(time.Second * 4)
-
-	for n = 0; n < loopNum; n++ {
-		k = r.Int31n(maxKey) + 1
-		v = r.Int31n(maxKey) + 1
-		l.Set(k, v)
-	}
-
-	time.Sleep(time.Second * 3)
+	l.SetExpiredtime(time.Second * 2)
 
 	for n = 0; n < loopNum; n++ {
 		k = r.Int31n(maxKey) + 1
@@ -102,9 +94,35 @@ func TestLFUExpire(t *testing.T) {
 
 	time.Sleep(time.Second)
 
+	for n = 0; n < loopNum; n++ {
+		k = r.Int31n(maxKey) + 1
+		v = r.Int31n(maxKey) + 1
+		l.Set(k, v)
+	}
+
+	for n = 0; n < loopNum; n++ {
+		k = r.Int31n(maxKey) + 1
+		v = r.Int31n(maxKey) + 1
+		l.SetExpired(k, v, 3*time.Second)
+	}
+
+	time.Sleep(time.Second)
+
 	lis := list.NewListTWithPool(nodePool)
 	l.ToList(lis)
-	t.Logf("lis length: %v", lis.GetLength())
+	t.Logf("sleep 2s, lis length: %v", lis.GetLength())
+
+	time.Sleep(time.Second)
+
+	for n = 0; n < loopNum; n++ {
+		k = r.Int31n(maxKey) + 1
+		v = r.Int31n(maxKey) + 1
+		l.SetExpired(k, v, 2*time.Second)
+	}
+
+	lis.Clear()
+	l.ToList(lis)
+	t.Logf("sleep 3s, lis length: %v", lis.GetLength())
 }
 
 func TestLFUWithLock(t *testing.T) {
