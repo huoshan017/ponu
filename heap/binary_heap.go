@@ -4,11 +4,11 @@ import "golang.org/x/exp/constraints"
 
 type BinaryHeap[T constraints.Ordered] struct {
 	array []T
-	t     BinaryType
+	t     HeapType
 }
 
-func NewBinaryHeap[T constraints.Ordered](t BinaryType) *BinaryHeap[T] {
-	if t != BinaryType_Max && t != BinaryType_Min {
+func NewBinaryHeap[T constraints.Ordered](t HeapType) *BinaryHeap[T] {
+	if t != HeapType_Max && t != HeapType_Min {
 		panic("ponu: heap type invalid")
 	}
 	return &BinaryHeap[T]{
@@ -18,13 +18,13 @@ func NewBinaryHeap[T constraints.Ordered](t BinaryType) *BinaryHeap[T] {
 
 func NewMaxBinaryHeap[T constraints.Ordered]() *BinaryHeap[T] {
 	return &BinaryHeap[T]{
-		t: BinaryType_Max,
+		t: HeapType_Max,
 	}
 }
 
 func NewMinBinaryHeap[T constraints.Ordered]() *BinaryHeap[T] {
 	return &BinaryHeap[T]{
-		t: BinaryType_Min,
+		t: HeapType_Min,
 	}
 }
 
@@ -49,8 +49,8 @@ func (h *BinaryHeap[T]) Get() (T, bool) {
 }
 
 func (h *BinaryHeap[T]) Peek() (T, bool) {
-	var v T
 	if len(h.array) <= 0 {
+		var v T
 		return v, false
 	}
 	return h.array[0], true
@@ -63,7 +63,7 @@ func (h *BinaryHeap[T]) Length() int32 {
 func (h *BinaryHeap[T]) adjustUp(n int) {
 	p := (n - 1) / 2
 	for p >= 0 {
-		if h.t == BinaryType_Max {
+		if h.t == HeapType_Max {
 			if h.array[n] <= h.array[p] {
 				break
 			}
@@ -87,7 +87,7 @@ func (h BinaryHeap[T]) adjustDown(n int) {
 
 	for l <= n {
 		m = l
-		if h.t == BinaryType_Max { // 大顶堆
+		if h.t == HeapType_Max { // 大顶堆
 			if r <= n && h.array[m] < h.array[r] {
 				m = r
 			}

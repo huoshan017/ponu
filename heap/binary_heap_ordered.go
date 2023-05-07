@@ -1,19 +1,19 @@
 package heap
 
-type BinaryType int
+type HeapType int
 
 const (
-	BinaryType_Max BinaryType = iota
-	BinaryType_Min BinaryType = 1
+	HeapType_Max HeapType = iota
+	HeapType_Min
 )
 
 type BinaryHeapOrdered[T Ordered] struct {
 	array []T
-	t     BinaryType
+	t     HeapType
 }
 
-func NewBinaryHeapOrdered[T Ordered](t BinaryType) *BinaryHeapOrdered[T] {
-	if t != BinaryType_Max && t != BinaryType_Min {
+func NewBinaryHeapOrdered[T Ordered](t HeapType) *BinaryHeapOrdered[T] {
+	if t != HeapType_Max && t != HeapType_Min {
 		panic("ponu: heap type invalid")
 	}
 	return &BinaryHeapOrdered[T]{
@@ -23,13 +23,13 @@ func NewBinaryHeapOrdered[T Ordered](t BinaryType) *BinaryHeapOrdered[T] {
 
 func NewMaxBinaryHeapOrdered[T Ordered]() *BinaryHeapOrdered[T] {
 	return &BinaryHeapOrdered[T]{
-		t: BinaryType_Max,
+		t: HeapType_Max,
 	}
 }
 
 func NewMinBinaryHeapOrdered[T Ordered]() *BinaryHeapOrdered[T] {
 	return &BinaryHeapOrdered[T]{
-		t: BinaryType_Min,
+		t: HeapType_Min,
 	}
 }
 
@@ -68,7 +68,7 @@ func (h *BinaryHeapOrdered[T]) Length() int32 {
 func (h *BinaryHeapOrdered[T]) adjustUp(n int) {
 	p := (n - 1) / 2
 	for p >= 0 {
-		if h.t == BinaryType_Max {
+		if h.t == HeapType_Max {
 			if h.array[n].LessEqual(h.array[p]) {
 				break
 			}
@@ -92,7 +92,7 @@ func (h BinaryHeapOrdered[T]) adjustDown(n int) {
 
 	for l <= n {
 		m = l
-		if h.t == BinaryType_Max { // 大顶堆
+		if h.t == HeapType_Max { // 大顶堆
 			if r <= n && h.array[m].Less(h.array[r]) {
 				m = r
 			}
