@@ -37,7 +37,7 @@ func newLFUBase[K comparable, V any](cap int32) *lfuBase[K, V] {
 	}
 	return &lfuBase[K, V]{
 		cap:        cap,
-		l:          list.NewObj(),
+		l:          list.List{},
 		k2i:        make(map[K]list.Iterator),
 		f2i:        make(map[int32]list.Iterator),
 		createTime: time.Now(),
@@ -52,7 +52,7 @@ func newLFUBaseWithTotalSize[K comparable, V any](cap int32, totalSize *int32) *
 	return &lfuBase[K, V]{
 		cap:        cap,
 		ts:         totalSize,
-		l:          list.NewObj(),
+		l:          list.List{},
 		k2i:        make(map[K]list.Iterator),
 		f2i:        make(map[int32]list.Iterator),
 		createTime: time.Now(),

@@ -229,9 +229,6 @@ func (w *wheelBase) addTimeout(t *Timer) bool {
 	cost := t.expireTime.Sub(now)
 	if cost <= 0 { // 已超時，剩餘步數為0，則直接執行
 		t.leftStep = 0
-		//if t.timeout >= 10*time.Millisecond && t.timeout < 15*time.Millisecond {
-		//log.Printf("!!!! timer_id=%v,  cost=%v,  w.step=%b", t.id, cost, w.step)
-		//}
 		l := getList()
 		l.PushBack(t)
 		w.resultSender.Send(t.senderIndex, l)
@@ -245,10 +242,6 @@ func (w *wheelBase) addTimeout(t *Timer) bool {
 		d = w.nextTickTime.Sub(now)
 	}
 
-	//if t.timeout >= 10*time.Millisecond && t.timeout < 15*time.Millisecond {
-	//log.Printf("!!!! before cost-d,  timer_id=%v, cost=%v, d=%v, step=%v, w.step=%v", t.id, cost, d, step, w.step)
-	//}
-
 	if cost <= d { // 表示在下一次tick之前超时，就在下一个tick时执行
 		step += 1
 	} else { // 超出下一次tick時間，就多一次step
@@ -257,10 +250,6 @@ func (w *wheelBase) addTimeout(t *Timer) bool {
 		step += 1 + int32((cost+interval-1)/interval)
 	}
 	t.leftStep = step
-
-	//if t.timeout >= 10*time.Millisecond && t.timeout < 15*time.Millisecond {
-	//log.Printf("!!!! cost=%v, timer_id=%v, d=%v, step=%v, w.step=%v", cost, t.id, d, step, w.step)
-	//}
 
 	w.addTimer(t, false)
 	return true
@@ -321,9 +310,6 @@ func (w *wheelBase) addTimer(t *Timer, update bool) {
 			putTimer(t)
 			panic(fmt.Sprintf("time wheel: insert time with forwardSlots %v failed", forwardSlots))
 		}
-		//if forwardSlots == 0 {
-		//	log.Printf("@@@@ timer_id=%v,  forwardSlots=%v,  layerN=%v,  pos=%v", t.id, forwardSlots, layerN, pos)
-		//}
 	} else {
 		iter = layer.insertTimerWithSlot(forwardSlots-1, t)
 	}

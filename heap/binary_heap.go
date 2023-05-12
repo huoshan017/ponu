@@ -78,7 +78,7 @@ func (h *BinaryHeap[T]) adjustUp(n int) {
 	}
 }
 
-func (h BinaryHeap[T]) adjustDown(n int) {
+func (h *BinaryHeap[T]) adjustDown(n int) {
 	var (
 		c, m int
 		l    = c*2 + 1

@@ -13,7 +13,7 @@ type ConcurrentList struct {
 
 func NewConcurrentList() *ConcurrentList {
 	cl := &ConcurrentList{
-		List: NewObj(),
+		List: List{},
 	}
 	cl.notFullCond = sync.NewCond(&cl.mutex)
 	cl.notEmptyCond = sync.NewCond(&cl.mutex)

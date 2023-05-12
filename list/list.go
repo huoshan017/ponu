@@ -80,10 +80,6 @@ func New() *List {
 	return &List{}
 }
 
-func NewObj() List {
-	return List{}
-}
-
 func (l List) GetLength() int32 {
 	return l.length
 }
@@ -315,7 +311,7 @@ func (l *List) REnd() Iterator {
 }
 
 func (l *List) Duplicate() List {
-	nl := NewObj()
+	var nl List
 	n := l.Begin()
 	for n != l.End() {
 		nl.PushBack(n.Value())
