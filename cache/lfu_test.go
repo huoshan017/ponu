@@ -84,7 +84,7 @@ func TestLFUExpire(t *testing.T) {
 		n, k, v int32
 	)
 
-	l.SetExpiredtime(time.Second * 2)
+	l.WithExpiredtime(time.Second * 2)
 
 	for n = 0; n < loopNum; n++ {
 		k = r.Int31n(maxKey) + 1

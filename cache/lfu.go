@@ -68,11 +68,11 @@ func (lfu *lfuBase[K, V]) isExpired(now time.Time, timePoint time.Duration) bool
 	return now.Sub(lfu.createTime) >= timePoint
 }
 
-func (lfu *lfuBase[K, V]) SetReclaimFunc(fun func(V)) {
+func (lfu *lfuBase[K, V]) WithReclaimFunc(fun func(V)) {
 	lfu.reclaimFunc = fun
 }
 
-func (lfu *lfuBase[K, V]) SetExpiredtime(t time.Duration) {
+func (lfu *lfuBase[K, V]) WithExpiredtime(t time.Duration) {
 	if t < minExpiredTime {
 		t = minExpiredTime
 	}
@@ -130,24 +130,7 @@ func (lfu *lfuBase[K, V]) Set(key K, value V) {
 }
 
 func (lfu *lfuBase[K, V]) SetExpired(key K, value V, expiredTime time.Duration) {
-	if lfu.k2i == nil {
-		lfu.k2i = make(map[K]list.Iterator)
-	}
-	if lfu.f2i == nil {
-		lfu.f2i = make(map[int32]list.Iterator)
-	}
-	if lfu.k2t == nil {
-		lfu.k2t = make(map[K]time.Duration)
-	}
-	iter, o := lfu.k2i[key]
-	if !o {
-		if lfu.cap <= int32(len(lfu.k2i)) { // 超出容量大小
-			lfu.deleteFirst()
-		}
-		lfu.add(key, value)
-	} else {
-		lfu.updateValue(iter, true, value)
-	}
+	lfu.Set(key, value)
 	lfu.k2t[key] = lfu.getExpiredTimePoint(time.Now(), expiredTime)
 }
 
@@ -373,7 +356,7 @@ func newLFUWithLockAndTotalSize[K comparable, V any](cap int32, totalSize *int32
 func (lfu *LFUWithLock[K, V]) SetReclaimFunc(fun func(V)) {
 	lfu.rwlock.Lock()
 	defer lfu.rwlock.Unlock()
-	lfu.lfuBase.SetReclaimFunc(fun)
+	lfu.lfuBase.WithReclaimFunc(fun)
 }
 
 func (lfu *LFUWithLock[K, V]) Set(key K, value V) {
