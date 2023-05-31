@@ -21,7 +21,7 @@ type node[K comparable, V any] struct {
 
 type lfuBase[K comparable, V any] struct {
 	cap         int32                   // 容量
-	reclaimFunc func(V)                 // value的回收内存函数
+	onEvictFun  func(K, V)              // value的回收内存函数
 	expiredTime time.Duration           // 超时淘汰时间
 	ts          *int32                  // 总大小
 	l           list.List               // 数据列表
@@ -60,16 +60,8 @@ func newLFUBaseWithTotalSize[K comparable, V any](cap int32, totalSize *int32) *
 	}
 }
 
-func (lfu *lfuBase[K, V]) getExpiredTimePoint(now time.Time, duration time.Duration) time.Duration {
-	return now.Sub(lfu.createTime) + duration
-}
-
-func (lfu *lfuBase[K, V]) isExpired(now time.Time, timePoint time.Duration) bool {
-	return now.Sub(lfu.createTime) >= timePoint
-}
-
-func (lfu *lfuBase[K, V]) WithReclaimFunc(fun func(V)) {
-	lfu.reclaimFunc = fun
+func (lfu *lfuBase[K, V]) WithOnEvict(fun func(K, V)) {
+	lfu.onEvictFun = fun
 }
 
 func (lfu *lfuBase[K, V]) WithExpiredtime(t time.Duration) {
@@ -132,15 +124,6 @@ func (lfu *lfuBase[K, V]) Set(key K, value V) {
 func (lfu *lfuBase[K, V]) SetExpired(key K, value V, expiredTime time.Duration) {
 	lfu.Set(key, value)
 	lfu.k2t[key] = lfu.getExpiredTimePoint(time.Now(), expiredTime)
-}
-
-func (lfu *lfuBase[K, V]) isKeyExpired(key K) bool {
-	if d, o := lfu.k2t[key]; o {
-		if lfu.isExpired(time.Now(), d) {
-			return true
-		}
-	}
-	return false
 }
 
 func (lfu *lfuBase[K, V]) Get(key K) (V, bool) {
@@ -283,8 +266,8 @@ func (lfu *lfuBase[K, V]) deleteFirst() bool {
 	delete(lfu.k2i, n.k)
 	lfu.l.PopFront()
 	delete(lfu.k2t, n.k)
-	if lfu.reclaimFunc != nil {
-		lfu.reclaimFunc(n.v)
+	if lfu.onEvictFun != nil {
+		lfu.onEvictFun(n.k, n.v)
 	}
 	return true
 }
@@ -301,8 +284,8 @@ func (lfu *lfuBase[K, V]) delete(key K) bool {
 	delete(lfu.k2i, key)
 	lfu.l.Delete(iter)
 	delete(lfu.k2t, n.k)
-	if lfu.reclaimFunc != nil {
-		lfu.reclaimFunc(n.v)
+	if lfu.onEvictFun != nil {
+		lfu.onEvictFun(n.k, n.v)
 	}
 	if lfu.ts != nil {
 		atomic.AddInt32(lfu.ts, -1)
@@ -324,6 +307,23 @@ func (lfu *lfuBase[K, V]) add(key K, value V) {
 	if lfu.expiredTime > 0 {
 		lfu.k2t[key] = lfu.getExpiredTimePoint(time.Now(), lfu.expiredTime)
 	}
+}
+
+func (lfu *lfuBase[K, V]) isKeyExpired(key K) bool {
+	if d, o := lfu.k2t[key]; o {
+		if lfu.isExpired(time.Now(), d) {
+			return true
+		}
+	}
+	return false
+}
+
+func (lfu *lfuBase[K, V]) getExpiredTimePoint(now time.Time, duration time.Duration) time.Duration {
+	return now.Sub(lfu.createTime) + duration
+}
+
+func (lfu *lfuBase[K, V]) isExpired(now time.Time, timePoint time.Duration) bool {
+	return now.Sub(lfu.createTime) >= timePoint
 }
 
 type LFU[K comparable, V any] struct {
@@ -353,10 +353,10 @@ func newLFUWithLockAndTotalSize[K comparable, V any](cap int32, totalSize *int32
 	}
 }
 
-func (lfu *LFUWithLock[K, V]) SetReclaimFunc(fun func(V)) {
+func (lfu *LFUWithLock[K, V]) WithOnEvict(fun func(K, V)) {
 	lfu.rwlock.Lock()
 	defer lfu.rwlock.Unlock()
-	lfu.lfuBase.WithReclaimFunc(fun)
+	lfu.lfuBase.WithOnEvict(fun)
 }
 
 func (lfu *LFUWithLock[K, V]) Set(key K, value V) {
