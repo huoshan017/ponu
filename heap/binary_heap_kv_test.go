@@ -1,10 +1,42 @@
 package heap
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
 )
+
+func TestBinaryHeapSetGet(t *testing.T) {
+	const (
+		count int32 = 100
+	)
+	var (
+		h      = NewMaxBinaryHeapKV[int32, int32]()
+		source = rand.NewSource(time.Now().Unix())
+	)
+	r := rand.New(source)
+	for i := int32(0); i < count; i++ {
+		v := r.Int31n(1000)
+		h.Set(i, v)
+	}
+
+	t.Logf("h length is %v", h.Length())
+
+	var (
+		o = true
+		v int32
+		s string
+	)
+	for o {
+		_, v, o = h.Get()
+		if o {
+			s = fmt.Sprintf("%v %v", s, v)
+		}
+	}
+
+	t.Logf("after get, h length is %v, get value list: %v", h.Length(), s)
+}
 
 func TestBinaryMinHeapKV(t *testing.T) {
 	const (

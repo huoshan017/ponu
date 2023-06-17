@@ -53,7 +53,9 @@ func (h *BinaryHeapKV[K, V]) Get() (K, V, bool) {
 	h.array = h.array[:l-1]
 	l -= 1
 	delete(h.k2n, kv.k)
-	h.k2n[h.array[0].k] = 0
+	if l > 0 {
+		h.k2n[h.array[0].k] = 0
+	}
 	h.adjustDown(0, l-1)
 	return kv.k, kv.v, true
 }
