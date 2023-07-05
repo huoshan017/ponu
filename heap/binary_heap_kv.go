@@ -33,10 +33,33 @@ func NewMinBinaryHeapKV[K comparable, V constraints.Ordered]() *BinaryHeapKV[K, 
 
 func (h *BinaryHeapKV[K, V]) Set(k K, v V) {
 	l := len(h.array)
-	h.array = append(h.array, pair[K, V]{k, v})
-	l += 1
-	h.k2n[k] = int32(l - 1)
-	h.adjustUp(l - 1)
+	idx, o := h.k2n[k]
+	if !o {
+		h.array = append(h.array, pair[K, V]{k, v})
+		l += 1
+		h.k2n[k] = int32(l - 1)
+		h.adjustUp(l - 1)
+	} else {
+		if h.array[idx].v == v {
+			return
+		}
+		// 跟原來的大小比較
+		if v > h.array[idx].v {
+			h.array[idx].v = v
+			if h.t == HeapType_Max {
+				h.adjustUp(int(idx))
+			} else {
+				h.adjustDown(int(idx), l-1)
+			}
+		} else {
+			h.array[idx].v = v
+			if h.t == HeapType_Min {
+				h.adjustUp(int(idx))
+			} else {
+				h.adjustDown(int(idx), l-1)
+			}
+		}
+	}
 }
 
 func (h *BinaryHeapKV[K, V]) Get() (K, V, bool) {

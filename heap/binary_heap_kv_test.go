@@ -24,14 +24,14 @@ func TestBinaryHeapSetGet(t *testing.T) {
 	t.Logf("h length is %v", h.Length())
 
 	var (
-		o = true
-		v int32
-		s string
+		o    = true
+		k, v int32
+		s    string
 	)
 	for o {
-		_, v, o = h.Get()
+		k, v, o = h.Get()
 		if o {
-			s = fmt.Sprintf("%v %v", s, v)
+			s = fmt.Sprintf("%v (%v:%v)", s, k, v)
 		}
 	}
 
