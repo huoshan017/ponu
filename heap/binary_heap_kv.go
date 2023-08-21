@@ -31,6 +31,12 @@ func NewMinBinaryHeapKV[K comparable, V constraints.Ordered]() *BinaryHeapKV[K, 
 	return NewBinaryHeapKV[K, V](HeapType_Min)
 }
 
+func (h *BinaryHeapKV[K, V]) Clear() {
+	h.array = h.array[:0]
+	h.k2n = nil
+	h.k2n = make(map[K]int32)
+}
+
 func (h *BinaryHeapKV[K, V]) Set(k K, v V) {
 	l := len(h.array)
 	idx, o := h.k2n[k]
