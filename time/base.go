@@ -130,7 +130,7 @@ func (t *TimerList) ExecuteFunc() {
 
 type wheelBase struct {
 	maxDuration    time.Duration
-	resultSender   IResultSender
+	resultSender   iresultSender
 	options        *Options
 	layers         [2][]*wheelLayer
 	periodIndex    int8
@@ -148,7 +148,7 @@ type wheelBase struct {
 	index2List map[int32]*list.ListT[*Timer]
 }
 
-func newWheelBase(timerMaxDuration time.Duration, resultSender IResultSender, options *Options) *wheelBase {
+func newWheelBase(timerMaxDuration time.Duration, resultSender iresultSender, options *Options) *wheelBase {
 	wheel := &wheelBase{resultSender: resultSender, options: options}
 	if wheel.options.GetInterval() < minInterval {
 		wheel.options.SetInterval(minInterval)

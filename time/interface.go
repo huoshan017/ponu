@@ -6,7 +6,7 @@ import (
 	"github.com/huoshan017/ponu/list"
 )
 
-type IResultSender interface {
+type iresultSender interface {
 	Send(int32, *list.ListT[*Timer])
 }
 

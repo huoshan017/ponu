@@ -82,7 +82,7 @@ type WheelX struct {
 	options          Options
 	reqList          *list.ConcurrentList
 	requesterCounter int32
-	resultSender     IResultSender
+	resultSender     iresultSender
 	state            int32
 	toDelIdMap       sync.Map
 	requesterMap     map[int32]*Requester

@@ -23,7 +23,7 @@ func (e *resultExecutor) Send(index int32, tlist *list.ListT[*Timer]) {
 type SWheel struct {
 	*wheelBase
 	options        Options
-	resultExecutor IResultSender
+	resultExecutor iresultSender
 }
 
 func NewSWheel(timerMaxDuration time.Duration, options ...Option) *SWheel {
